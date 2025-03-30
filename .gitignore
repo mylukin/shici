@@ -12,8 +12,9 @@ ENV/
 
 # 生成的音频文件
 static/audio/*
+batches/*
 !static/audio/.gitkeep
-
+!batches/.gitkeep
 # 日志文件
 *.log
 

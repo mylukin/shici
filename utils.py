@@ -13,6 +13,7 @@ import threading
 import signal
 import psutil
 from datetime import datetime, timedelta
+import random
 
 # 在导入 pydub 之前，创建一个 mock 类来防止 pyaudioop 导入错误
 import sys
@@ -53,20 +54,22 @@ logger = logging.getLogger(__name__)
 logger.info(f"日志系统初始化完成，调试模式：{'开启' if DEBUG_MODE else '关闭'}")
 
 # 进程跟踪
-active_processes = {}  # 批次ID到其进程ID列表的映射
-process_lock = threading.Lock()
+active_processes = {}  # 存储批次ID到进程ID列表的映射
+process_lock = threading.Lock()  # 用于保护active_processes的锁
 
 def register_process(batch_id: str, pid: int = None):
-    """注册一个进程为特定批次的一部分"""
+    """注册进程到批次，用于后续跟踪和清理"""
     if pid is None:
-        pid = os.getpid()  # 获取当前进程ID
+        pid = os.getpid()
     
+    logger.info(f"注册进程 {pid} 到批次 {batch_id}")
     with process_lock:
         if batch_id not in active_processes:
             active_processes[batch_id] = []
+        
         if pid not in active_processes[batch_id]:
             active_processes[batch_id].append(pid)
-            logger.debug(f"为批次 {batch_id} 注册进程 PID: {pid}")
+            logger.debug(f"批次 {batch_id} 当前活跃进程: {active_processes[batch_id]}")
 
 def get_child_processes(parent_pid: int) -> List[int]:
     """获取指定父进程的所有子进程ID"""
@@ -74,46 +77,94 @@ def get_child_processes(parent_pid: int) -> List[int]:
         parent = psutil.Process(parent_pid)
         children = parent.children(recursive=True)
         return [child.pid for child in children]
-    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess) as e:
+        logger.error(f"获取进程 {parent_pid} 的子进程时出错: {str(e)}")
+        return []
+    except Exception as e:
+        logger.error(f"获取子进程时发生未知错误: {str(e)}")
         return []
 
 def terminate_batch_processes(batch_id: str) -> bool:
     """终止与批次关联的所有进程"""
+    logger.info(f"开始终止批次 {batch_id} 的相关进程")
+    
     with process_lock:
         if batch_id not in active_processes:
-            logger.warning(f"找不到批次 {batch_id} 的进程")
+            logger.warning(f"找不到批次 {batch_id} 的进程记录")
             return False
         
         pids = active_processes[batch_id].copy()
+        logger.info(f"批次 {batch_id} 的记录进程: {pids}")
     
     success = True
     terminated_count = 0
+    child_pids = []
     
     # 首先收集所有相关进程（包括子进程）
     all_pids = set(pids)
     for pid in pids:
         try:
+            # 尝试获取进程对象，确认进程是否存在
+            try:
+                proc = psutil.Process(pid)
+                # 添加主进程信息日志
+                logger.info(f"找到主进程 {pid}, 命令行: {proc.cmdline()}")
+            except psutil.NoSuchProcess:
+                logger.warning(f"进程 {pid} 已不存在")
+                continue
+                
             # 获取子进程
-            child_pids = get_child_processes(pid)
-            all_pids.update(child_pids)
+            children = get_child_processes(pid)
+            if children:
+                logger.info(f"进程 {pid} 的子进程: {children}")
+                child_pids.extend(children)
+                all_pids.update(children)
         except Exception as e:
-            logger.error(f"获取进程 {pid} 的子进程时出错: {str(e)}")
+            logger.error(f"处理进程 {pid} 时出错: {str(e)}")
     
-    # 终止所有进程
-    for pid in all_pids:
+    if child_pids:
+        logger.info(f"发现批次 {batch_id} 的子进程: {child_pids}")
+    
+    # 终止所有进程，先终止子进程，再终止父进程
+    all_pids_list = sorted(list(all_pids), key=lambda x: 0 if x in child_pids else 1)
+    
+    for pid in all_pids_list:
         try:
             if pid == os.getpid():  # 跳过当前进程
+                logger.debug(f"跳过当前进程 {pid}")
                 continue
                 
             # 尝试终止进程
             process = psutil.Process(pid)
-            process.terminate()  # 发送SIGTERM
+            
+            # 记录进程信息
+            try:
+                cmd = " ".join(process.cmdline())
+                logger.info(f"终止进程 {pid}, 命令行: {cmd[:100]}...")
+            except:
+                pass
+                
+            # 首先尝试SIGTERM温和终止
+            process.terminate()
+            
+            # 给进程一点时间退出
+            try:
+                process.wait(timeout=0.5)  # 等待进程退出，最多0.5秒
+                logger.info(f"进程 {pid} 已正常退出")
+            except psutil.TimeoutExpired:
+                # 如果进程没有及时退出，强制杀死
+                logger.warning(f"进程 {pid} 没有响应SIGTERM，尝试强制终止")
+                process.kill()  # 发送SIGKILL
+            
             terminated_count += 1
-            logger.info(f"已终止批次 {batch_id} 的进程 {pid}")
-        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess) as e:
-            logger.debug(f"终止进程 {pid} 时出错: {str(e)}")
+            
+        except psutil.NoSuchProcess:
+            logger.debug(f"进程 {pid} 已不存在")
+        except psutil.AccessDenied:
+            logger.warning(f"无权限终止进程 {pid}")
+            success = False
         except Exception as e:
-            logger.error(f"终止进程 {pid} 时遇到未预期的错误: {str(e)}")
+            logger.error(f"终止进程 {pid} 时遇到错误: {str(e)}")
             success = False
     
     # 清除记录
@@ -121,7 +172,7 @@ def terminate_batch_processes(batch_id: str) -> bool:
         if batch_id in active_processes:
             del active_processes[batch_id]
     
-    logger.info(f"批次 {batch_id} 的进程清理完成，终止了 {terminated_count} 个进程")
+    logger.info(f"批次 {batch_id} 的进程清理完成，尝试终止 {len(all_pids)} 个进程，成功终止 {terminated_count} 个")
     return success
 
 async def get_available_voices() -> List[Dict[str, Any]]:
@@ -284,58 +335,75 @@ async def convert_text_to_speech(
         rate: 语速
         volume: 音量
         pitch: 音调
-        output_file: 输出文件路径，如果为None则生成随机文件
-        batch_id: 关联的批次ID，用于进程管理
-        
+        output_file: 输出文件路径，如果不指定则生成临时文件
+        batch_id: 批次ID，用于进程管理
+    
     Returns:
         生成的音频文件路径
     """
     if not text.strip():
-        raise ValueError("文本不能为空")
-        
-    # 如果提供了批次ID，注册当前进程
+        return None
+    
+    start_time = time.time()
+    
+    # 如果提供了batch_id，注册当前进程到批次
+    current_pid = os.getpid()
     if batch_id:
-        register_process(batch_id)
-        current_pid = os.getpid()
-        logger.debug(f"TTS进程 {current_pid} 已注册到批次 {batch_id}")
+        register_process(batch_id, current_pid)
+        logger.info(f"批次 {batch_id} 的TTS转换进程 {current_pid} 已注册")
     
-    logger.info(f"开始转换文本，长度: {len(text)}, 语音: {voice}, 语速: {rate}, 音量: {volume}, 音调: {pitch}")
-    
-    # 如果没有提供输出文件路径，生成一个随机文件名
+    # 生成临时文件路径
     if output_file is None:
-        output_dir = "static/audio"
-        os.makedirs(output_dir, exist_ok=True)
-        output_file = os.path.join(output_dir, f"{uuid.uuid4()}.mp3")
+        temp_dir = "static/temp"
+        os.makedirs(temp_dir, exist_ok=True)
+        output_file = os.path.join(temp_dir, f"tts_{int(time.time())}_{random.randint(1000, 9999)}.mp3")
     
     # 确保输出目录存在
-    output_dir = os.path.dirname(output_file)
-    if output_dir and not os.path.exists(output_dir):
-        os.makedirs(output_dir, exist_ok=True)
+    os.makedirs(os.path.dirname(os.path.abspath(output_file)), exist_ok=True)
     
     try:
-        # 实例化通信对象
+        logger.info(f"开始转换文本为语音, 文本长度: {len(text)}, 输出文件: {output_file}")
+        
+        # 生成TTS实例
+        if DEBUG_MODE:
+            logger.debug(f"TTS参数: voice={voice}, rate={rate}, volume={volume}, pitch={pitch}")
+        
         communicate = edge_tts.Communicate(text, voice, rate=rate, volume=volume, pitch=pitch)
         
-        # 转换为语音并保存到文件
+        # 转换文本并保存音频
         await communicate.save(output_file)
         
-        # 确保文件存在
-        if not os.path.exists(output_file):
-            raise FileNotFoundError(f"音频文件生成失败: {output_file}")
-            
-        logger.info(f"文本转换完成，输出文件: {output_file}")
+        duration = time.time() - start_time
+        logger.info(f"文本转换完成，用时: {duration:.2f}秒, 输出文件: {output_file}")
+        
+        # 输出文件大小信息
+        file_size = os.path.getsize(output_file) / 1024  # KB
+        logger.info(f"生成的音频文件大小: {file_size:.2f} KB")
         
         return output_file
     except Exception as e:
-        logger.error(f"文本转换失败: {str(e)}")
-        # 如果文件存在但可能不完整，尝试删除
-        if output_file and os.path.exists(output_file):
-            try:
-                os.remove(output_file)
-                logger.info(f"已删除不完整的输出文件: {output_file}")
-            except:
-                pass
-        raise
+        error_msg = str(e)
+        logger.error(f"文本转语音失败: {error_msg}")
+        
+        # 如果是被强制终止的进程，提供更明确的错误信息
+        if "被强制终止" in error_msg or "process was terminated" in error_msg:
+            logger.info(f"检测到进程被终止，可能是响应停止请求")
+        
+        # 如果批次标记为停止，不将此视为错误
+        import threading
+        from app import stop_requested, global_lock
+        
+        is_stopped = False
+        if batch_id:
+            with global_lock:
+                is_stopped = batch_id in stop_requested
+        
+        if is_stopped:
+            logger.info(f"批次 {batch_id} 已请求停止，忽略转换错误")
+            raise Exception("处理已停止")
+        else:
+            # 重新抛出原始异常
+            raise
 
 def merge_audio_files(audio_files: List[str], output_file: str) -> str:
     """
