@@ -9,8 +9,9 @@ import logging
 import subprocess
 import sys
 import time
-import datetime
-import shutil
+import threading
+import signal
+import psutil
 from datetime import datetime, timedelta
 
 # 在导入 pydub 之前，创建一个 mock 类来防止 pyaudioop 导入错误
@@ -50,6 +51,78 @@ logger = logging.getLogger(__name__)
 
 # 初始化日志
 logger.info(f"日志系统初始化完成，调试模式：{'开启' if DEBUG_MODE else '关闭'}")
+
+# 进程跟踪
+active_processes = {}  # 批次ID到其进程ID列表的映射
+process_lock = threading.Lock()
+
+def register_process(batch_id: str, pid: int = None):
+    """注册一个进程为特定批次的一部分"""
+    if pid is None:
+        pid = os.getpid()  # 获取当前进程ID
+    
+    with process_lock:
+        if batch_id not in active_processes:
+            active_processes[batch_id] = []
+        if pid not in active_processes[batch_id]:
+            active_processes[batch_id].append(pid)
+            logger.debug(f"为批次 {batch_id} 注册进程 PID: {pid}")
+
+def get_child_processes(parent_pid: int) -> List[int]:
+    """获取指定父进程的所有子进程ID"""
+    try:
+        parent = psutil.Process(parent_pid)
+        children = parent.children(recursive=True)
+        return [child.pid for child in children]
+    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+        return []
+
+def terminate_batch_processes(batch_id: str) -> bool:
+    """终止与批次关联的所有进程"""
+    with process_lock:
+        if batch_id not in active_processes:
+            logger.warning(f"找不到批次 {batch_id} 的进程")
+            return False
+        
+        pids = active_processes[batch_id].copy()
+    
+    success = True
+    terminated_count = 0
+    
+    # 首先收集所有相关进程（包括子进程）
+    all_pids = set(pids)
+    for pid in pids:
+        try:
+            # 获取子进程
+            child_pids = get_child_processes(pid)
+            all_pids.update(child_pids)
+        except Exception as e:
+            logger.error(f"获取进程 {pid} 的子进程时出错: {str(e)}")
+    
+    # 终止所有进程
+    for pid in all_pids:
+        try:
+            if pid == os.getpid():  # 跳过当前进程
+                continue
+                
+            # 尝试终止进程
+            process = psutil.Process(pid)
+            process.terminate()  # 发送SIGTERM
+            terminated_count += 1
+            logger.info(f"已终止批次 {batch_id} 的进程 {pid}")
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess) as e:
+            logger.debug(f"终止进程 {pid} 时出错: {str(e)}")
+        except Exception as e:
+            logger.error(f"终止进程 {pid} 时遇到未预期的错误: {str(e)}")
+            success = False
+    
+    # 清除记录
+    with process_lock:
+        if batch_id in active_processes:
+            del active_processes[batch_id]
+    
+    logger.info(f"批次 {batch_id} 的进程清理完成，终止了 {terminated_count} 个进程")
+    return success
 
 async def get_available_voices() -> List[Dict[str, Any]]:
     """获取 Edge TTS 可用的所有语音"""
@@ -193,44 +266,75 @@ def group_entries_by_count(entries: List[Dict[str, str]], group_size: int = 10) 
     logger.info(f"分组完成，共 {len(groups)} 组，平均每组 {sum(len(group) for group in groups)/len(groups):.1f} 个词条")
     return groups
 
-async def convert_text_to_speech(text: str, voice: str, rate: str = "+0%", volume: str = "+0%", pitch: str = "+0Hz", output_path: str = None) -> str:
+async def convert_text_to_speech(
+    text: str, 
+    voice: str = "zh-CN-YunyangNeural", 
+    rate: str = "+0%", 
+    volume: str = "+0%", 
+    pitch: str = "+0Hz", 
+    output_file: str = None,
+    batch_id: str = None
+) -> str:
     """
-    使用 Edge TTS 将文本转换为语音
+    将文本转换为语音
     
     Args:
-        text: Text to convert
-        voice: Voice to use
-        rate: Speed of speech (e.g., "+0%", "-50%", "+50%")
-        volume: Volume of speech (e.g., "+0%", "-50%", "+50%")
-        pitch: Pitch of speech (e.g., "+0Hz", "-50Hz", "+50Hz")
-        output_path: Optional output path for the audio file
+        text: 要转换的文本
+        voice: 语音名称
+        rate: 语速
+        volume: 音量
+        pitch: 音调
+        output_file: 输出文件路径，如果为None则生成随机文件
+        batch_id: 关联的批次ID，用于进程管理
         
     Returns:
-        Path to the generated audio file
+        生成的音频文件路径
     """
-    start_time = time.time()
-    text_preview = text[:50] + "..." if len(text) > 50 else text
+    if not text.strip():
+        raise ValueError("文本不能为空")
+        
+    # 如果提供了批次ID，注册当前进程
+    if batch_id:
+        register_process(batch_id)
+        current_pid = os.getpid()
+        logger.debug(f"TTS进程 {current_pid} 已注册到批次 {batch_id}")
     
-    if DEBUG_MODE:
-        logger.debug(f"开始转换文本为语音: '{text_preview}'")
-        logger.debug(f"参数: voice={voice}, rate={rate}, volume={volume}, pitch={pitch}")
-    else:
-        logger.info(f"开始转换文本: '{text_preview}'")
+    logger.info(f"开始转换文本，长度: {len(text)}, 语音: {voice}, 语速: {rate}, 音量: {volume}, 音调: {pitch}")
     
-    if output_path is None:
-        os.makedirs("static/audio", exist_ok=True)
-        output_path = f"static/audio/{uuid.uuid4()}.mp3"
+    # 如果没有提供输出文件路径，生成一个随机文件名
+    if output_file is None:
+        output_dir = "static/audio"
+        os.makedirs(output_dir, exist_ok=True)
+        output_file = os.path.join(output_dir, f"{uuid.uuid4()}.mp3")
+    
+    # 确保输出目录存在
+    output_dir = os.path.dirname(output_file)
+    if output_dir and not os.path.exists(output_dir):
+        os.makedirs(output_dir, exist_ok=True)
     
     try:
+        # 实例化通信对象
         communicate = edge_tts.Communicate(text, voice, rate=rate, volume=volume, pitch=pitch)
-        await communicate.save(output_path)
         
-        end_time = time.time()
-        file_size = os.path.getsize(output_path) / 1024  # KB
-        logger.info(f"文本转语音成功，输出文件: {output_path}, 大小: {file_size:.1f}KB, 用时: {end_time-start_time:.2f}秒")
-        return output_path
+        # 转换为语音并保存到文件
+        await communicate.save(output_file)
+        
+        # 确保文件存在
+        if not os.path.exists(output_file):
+            raise FileNotFoundError(f"音频文件生成失败: {output_file}")
+            
+        logger.info(f"文本转换完成，输出文件: {output_file}")
+        
+        return output_file
     except Exception as e:
-        logger.error(f"文本转语音失败: {str(e)}")
+        logger.error(f"文本转换失败: {str(e)}")
+        # 如果文件存在但可能不完整，尝试删除
+        if output_file and os.path.exists(output_file):
+            try:
+                os.remove(output_file)
+                logger.info(f"已删除不完整的输出文件: {output_file}")
+            except:
+                pass
         raise
 
 def merge_audio_files(audio_files: List[str], output_file: str) -> str:

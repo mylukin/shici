@@ -367,10 +367,21 @@ async def stop_batch(batch_id: str):
     with global_lock:
         stop_requested.add(batch_id)
     
+    # 终止与批次关联的所有进程
+    try:
+        success = utils.terminate_batch_processes(batch_id)
+        logger.info(f"批次进程终止{'成功' if success else '失败'}: {batch_id}")
+    except Exception as e:
+        logger.error(f"终止批次进程时出错: {str(e)}")
+        success = False
+    
+    # 更新批次状态为已停止
+    update_batch_status(batch_id, "stopped", "用户请求停止")
+    
     logger.info(f"批次已标记为停止: {batch_id}")
     return JSONResponse({
         "success": True,
-        "message": "已发送停止请求"
+        "message": "已发送停止请求并终止相关进程"
     })
 
 @app.websocket("/ws/{batch_id}")
@@ -385,11 +396,24 @@ async def websocket_endpoint(websocket: WebSocket, batch_id: str):
         params = json.loads(data)
         logger.info(f"通过WebSocket接收处理参数: {params}")
         
+        # 注册当前进程
+        utils.register_process(batch_id, os.getpid())
+        
         # 检查是否是停止请求
         if params.get("action") == "stop":
             logger.info(f"收到直接停止请求: {batch_id}")
             with global_lock:
                 stop_requested.add(batch_id)
+            
+            # 终止与批次关联的所有进程
+            try:
+                utils.terminate_batch_processes(batch_id)
+            except Exception as e:
+                logger.error(f"终止批次进程时出错: {str(e)}")
+            
+            # 更新批次状态
+            update_batch_status(batch_id, "stopped", "用户请求停止")
+            
             await manager.send_message(batch_id, json.dumps({
                 "type": "stopped",
                 "message": "处理已停止"
@@ -430,89 +454,35 @@ async def websocket_endpoint(websocket: WebSocket, batch_id: str):
         # 尝试获取锁，如果已被占用则表明有其他线程在处理
         if not processing_lock.acquire(blocking=False):
             logger.info(f"批次 {batch_id} 已在处理中，发送当前状态")
-            
-            # 检查批次是否已有状态信息，如果有则发送已生成的片段信息
-            if os.path.exists(batch_info_file):
-                try:
-                    with open(batch_info_file, "r", encoding="utf-8") as f:
-                        batch_info = json.load(f)
-                    
-                    # 如果批次已完成，发送所有片段信息和完成状态
-                    if batch_info.get("status") == "completed":
-                        # 发送之前生成的音频片段信息
-                        audio_files = [f for f in os.listdir(batch_audio_dir) if f.endswith('.mp3')]
-                        
-                        # 按片段ID排序
-                        audio_files.sort(key=lambda x: int(re.search(r'segment_(\d+)', x).group(1)) if re.search(r'segment_(\d+)', x) else 0)
-                        
-                        await manager.send_message(batch_id, json.dumps({
-                            "type": "info",
-                            "message": f"批次已完成处理，共有 {len(audio_files)} 个音频片段"
-                        }))
-                        
-                        # 发送每个片段的信息
-                        for idx, file in enumerate(audio_files):
-                            segment_idx = idx + 1
-                            web_path = f"/batches/{batch_id}/audio/{file}"
-                            
-                            # 尝试读取文件内容前几个字符作为预览
-                            segment_text = f"片段 {segment_idx}"
-                            try:
-                                # 根据文件名找到对应的片段文本（如果有）
-                                # 这里可能需要根据实际情况修改逻辑
-                                pass
-                            except:
-                                pass
-                            
-                            await manager.send_message(batch_id, json.dumps({
-                                "type": "audio",
-                                "data": {
-                                    "id": segment_idx,
-                                    "text": segment_text,
-                                    "path": web_path,
-                                    "segment_idx": segment_idx,
-                                    "total_segments": len(audio_files)
-                                }
-                            }))
-                        
-                        # 如果合并文件存在，发送完成信息
-                        complete_path = os.path.join(batch_dir, "complete.mp3")
-                        if os.path.exists(complete_path):
-                            web_path = f"/batches/{batch_id}/complete.mp3"
-                            await manager.send_message(batch_id, json.dumps({
-                                "type": "complete",
-                                "data": {
-                                    "path": web_path,
-                                    "total_segments": len(audio_files),
-                                    "file_size_kb": os.path.getsize(complete_path) / 1024
-                                }
-                            }))
-                            
-                            await manager.send_message(batch_id, json.dumps({
-                                "type": "finished"
-                            }))
-                        return
-                    
-                    # 如果批次遇到错误，发送错误状态
-                    elif batch_info.get("status") == "error":
-                        error_message = batch_info.get("error", "未知错误")
-                        await manager.send_message(batch_id, json.dumps({
-                            "type": "error",
-                            "message": f"批次处理失败: {error_message}"
-                        }))
-                        return
-                
-                except Exception as e:
-                    logger.error(f"读取批次信息失败: {str(e)}")
-            
-            # 如果无法获取锁但也没有状态信息，通知用户批次正在处理中
-            await manager.send_message(batch_id, json.dumps({
-                "type": "info",
-                "message": "批次已在其他会话中处理，请等待或刷新页面查看最新状态"
-            }))
+            await check_and_send_batch_status(batch_id, websocket, batch_dir, batch_audio_dir, batch_info_file)
             return
         
-        # 成功获取锁，现在可以处理批次
+        # 成功获取锁，现在检查批次状态
+        if os.path.exists(batch_info_file):
+            try:
+                with open(batch_info_file, "r", encoding="utf-8") as f:
+                    batch_info = json.load(f)
+                
+                # 如果批次已完成或已停止，发送历史数据并返回
+                status = batch_info.get("status", "")
+                if status in ["completed", "stopped"]:
+                    processing_lock.release()
+                    await check_and_send_batch_status(batch_id, websocket, batch_dir, batch_audio_dir, batch_info_file)
+                    return
+                
+                # 如果批次处于错误状态，检查是否需要重新开始
+                if status == "error":
+                    error_message = batch_info.get("error", "未知错误")
+                    await manager.send_message(batch_id, json.dumps({
+                        "type": "info",
+                        "message": f"上次处理失败 ({error_message})，正在重新尝试..."
+                    }))
+                    # 不返回，继续处理
+            except Exception as e:
+                logger.error(f"读取批次信息失败: {str(e)}")
+                # 继续处理
+        
+        # 处理批次
         logger.info(f"获取到批次 {batch_id} 的处理锁，开始处理")
         
         try:
@@ -549,6 +519,24 @@ async def websocket_endpoint(websocket: WebSocket, batch_id: str):
                 "message": f"文本已分割为 {total_segments} 个片段"
             }))
             
+            # 更新状态为处理中
+            update_batch_status(batch_id, "processing")
+            
+            # 记录片段信息
+            segments_info = []
+            for idx, segment in enumerate(segments):
+                segment_text = segment.strip()
+                if segment_text:
+                    segments_info.append({
+                        "id": idx + 1,
+                        "text": segment_text[:100] + ("..." if len(segment_text) > 100 else ""),
+                        "status": "pending"
+                    })
+            
+            # 保存片段信息
+            with open(os.path.join(batch_dir, "segments.json"), "w", encoding="utf-8") as f:
+                json.dump(segments_info, f, ensure_ascii=False, indent=2)
+            
             # 处理每个文本片段并生成音频
             audio_files = []
             
@@ -561,6 +549,7 @@ async def websocket_endpoint(websocket: WebSocket, batch_id: str):
                             "type": "stopped",
                             "message": "处理已停止"
                         }))
+                        
                         # 更新批次状态
                         update_batch_status(batch_id, "stopped", "用户请求停止")
                         return
@@ -569,16 +558,36 @@ async def websocket_endpoint(websocket: WebSocket, batch_id: str):
                 if not segment_text:
                     continue
                 
+                # 更新片段状态为处理中
+                if idx < len(segments_info):
+                    segments_info[idx]["status"] = "processing"
+                    with open(os.path.join(batch_dir, "segments.json"), "w", encoding="utf-8") as f:
+                        json.dump(segments_info, f, ensure_ascii=False, indent=2)
+                
                 # 生成音频文件名
                 output_filename = os.path.join(batch_audio_dir, f"segment_{idx+1}.mp3")
                 web_path = f"/batches/{batch_id}/audio/segment_{idx+1}.mp3"
                 
                 try:
-                    # 转换文本片段为语音
-                    await utils.convert_text_to_speech(segment_text, voice, rate, volume, pitch, output_filename)
+                    # 转换文本片段为语音，并提供批次ID用于进程管理
+                    await utils.convert_text_to_speech(
+                        segment_text, 
+                        voice, 
+                        rate, 
+                        volume, 
+                        pitch, 
+                        output_filename,
+                        batch_id
+                    )
                     
                     # 添加到音频文件列表
                     audio_files.append(output_filename)
+                    
+                    # 更新片段状态为完成
+                    if idx < len(segments_info):
+                        segments_info[idx]["status"] = "completed"
+                        with open(os.path.join(batch_dir, "segments.json"), "w", encoding="utf-8") as f:
+                            json.dump(segments_info, f, ensure_ascii=False, indent=2)
                     
                     # 发送进度信息到前端
                     segment_preview = segment_text[:50] + "..." if len(segment_text) > 50 else segment_text
@@ -597,6 +606,14 @@ async def websocket_endpoint(websocket: WebSocket, batch_id: str):
                     
                 except Exception as e:
                     logger.error(f"转换片段 {idx+1} 失败: {str(e)}")
+                    
+                    # 更新片段状态为错误
+                    if idx < len(segments_info):
+                        segments_info[idx]["status"] = "error"
+                        segments_info[idx]["error"] = str(e)
+                        with open(os.path.join(batch_dir, "segments.json"), "w", encoding="utf-8") as f:
+                            json.dump(segments_info, f, ensure_ascii=False, indent=2)
+                    
                     await manager.send_message(batch_id, json.dumps({
                         "type": "error",
                         "message": f"转换片段 {idx+1} 失败: {str(e)}"
@@ -688,6 +705,113 @@ async def websocket_endpoint(websocket: WebSocket, batch_id: str):
         with global_lock:
             if batch_id in stop_requested:
                 stop_requested.remove(batch_id)
+
+async def check_and_send_batch_status(batch_id: str, websocket: WebSocket, batch_dir: str, batch_audio_dir: str, batch_info_file: str):
+    """检查批次状态并发送历史数据"""
+    try:
+        # 读取批次信息
+        if os.path.exists(batch_info_file):
+            with open(batch_info_file, "r", encoding="utf-8") as f:
+                batch_info = json.load(f)
+            
+            status = batch_info.get("status", "")
+            
+            # 发送批次状态信息
+            await manager.send_message(batch_id, json.dumps({
+                "type": "info",
+                "message": f"批次状态: {status}"
+            }))
+            
+            # 如果是已完成或已停止的批次，发送已生成的音频片段
+            if status in ["completed", "stopped", "error"]:
+                # 发送之前生成的音频片段信息
+                audio_files = [f for f in os.listdir(batch_audio_dir) if f.endswith('.mp3')]
+                
+                # 按片段ID排序
+                audio_files.sort(key=lambda x: int(re.search(r'segment_(\d+)', x).group(1)) if re.search(r'segment_(\d+)', x) else 0)
+                
+                await manager.send_message(batch_id, json.dumps({
+                    "type": "info",
+                    "message": f"找到 {len(audio_files)} 个已生成的音频片段"
+                }))
+                
+                # 发送每个片段的信息
+                for idx, file in enumerate(audio_files):
+                    segment_idx = idx + 1
+                    web_path = f"/batches/{batch_id}/audio/{file}"
+                    
+                    # 尝试从segments.json获取文本信息
+                    segment_text = f"片段 {segment_idx}"
+                    try:
+                        segments_file = os.path.join(batch_dir, "segments.json")
+                        if os.path.exists(segments_file):
+                            with open(segments_file, "r", encoding="utf-8") as f:
+                                segments_info = json.load(f)
+                            if idx < len(segments_info):
+                                segment_text = segments_info[idx].get("text", segment_text)
+                    except:
+                        pass
+                    
+                    await manager.send_message(batch_id, json.dumps({
+                        "type": "audio",
+                        "data": {
+                            "id": segment_idx,
+                            "text": segment_text,
+                            "path": web_path,
+                            "segment_idx": segment_idx,
+                            "total_segments": len(audio_files)
+                        }
+                    }))
+                
+                # 如果合并文件存在，发送完成信息
+                complete_path = os.path.join(batch_dir, "complete.mp3")
+                if os.path.exists(complete_path):
+                    web_path = f"/batches/{batch_id}/complete.mp3"
+                    await manager.send_message(batch_id, json.dumps({
+                        "type": "complete",
+                        "data": {
+                            "path": web_path,
+                            "total_segments": len(audio_files),
+                            "file_size_kb": os.path.getsize(complete_path) / 1024
+                        }
+                    }))
+                
+                # 如果是已完成状态，发送完成消息
+                if status == "completed":
+                    await manager.send_message(batch_id, json.dumps({
+                        "type": "finished"
+                    }))
+                # 如果是已停止状态，发送停止消息
+                elif status == "stopped":
+                    await manager.send_message(batch_id, json.dumps({
+                        "type": "stopped",
+                        "message": "处理已停止"
+                    }))
+                # 如果是错误状态，发送错误消息
+                elif status == "error":
+                    error_message = batch_info.get("error", "未知错误")
+                    await manager.send_message(batch_id, json.dumps({
+                        "type": "error",
+                        "message": f"处理失败: {error_message}"
+                    }))
+            # 如果批次正在处理中，发送处理中消息
+            elif status == "processing":
+                await manager.send_message(batch_id, json.dumps({
+                    "type": "info",
+                    "message": "批次正在其他会话中处理，请等待或刷新页面查看最新状态"
+                }))
+        else:
+            # 批次信息文件不存在，可能是新批次
+            await manager.send_message(batch_id, json.dumps({
+                "type": "info",
+                "message": "批次状态未知，可能是新创建的批次"
+            }))
+    except Exception as e:
+        logger.error(f"发送批次状态信息失败: {str(e)}")
+        await manager.send_message(batch_id, json.dumps({
+            "type": "error",
+            "message": f"检查批次状态失败: {str(e)}"
+        }))
 
 @app.get("/download/{filename}")
 async def download_file(filename: str):
