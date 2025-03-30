@@ -559,6 +559,45 @@
 
           const data = await response.json();
 
+          // 检查是否有合并文件
+          if (data.merged_file) {
+            // 添加合并文件的播放器
+            const mergedEntry = document.createElement('div');
+            mergedEntry.className = 'audio-entry complete-audio';
+            mergedEntry.style.backgroundColor = '#e8f5e9';
+            mergedEntry.style.marginBottom = '20px';
+            mergedEntry.style.padding = '15px';
+            mergedEntry.style.borderRadius = '8px';
+            mergedEntry.style.border = '1px solid #81c784';
+
+            const mergedHeader = document.createElement('h4');
+            mergedHeader.textContent = `完整合并音频 (${data.audio_files.length} 个段落)`;
+            mergedHeader.style.marginBottom = '15px';
+            mergedHeader.style.color = '#2e7d32';
+
+            const mergedAudio = document.createElement('audio');
+            mergedAudio.controls = true;
+            mergedAudio.src = data.merged_file;
+            mergedAudio.style.width = '100%';
+
+            mergedEntry.appendChild(mergedHeader);
+            mergedEntry.appendChild(mergedAudio);
+            audioContainer.appendChild(mergedEntry);
+
+            // 添加分割线
+            const divider = document.createElement('hr');
+            divider.style.margin = '25px 0';
+            divider.style.borderTop = '1px dashed #ccc';
+            audioContainer.appendChild(divider);
+
+            // 添加段落音频的标题
+            const segmentsHeader = document.createElement('h4');
+            segmentsHeader.textContent = '单独段落音频';
+            segmentsHeader.style.marginBottom = '15px';
+            audioContainer.appendChild(segmentsHeader);
+          }
+
+          // 添加各个段落的音频
           data.audio_files.forEach((file, index) => {
             const audioEntry = document.createElement('div');
             audioEntry.className = 'audio-entry';
@@ -608,7 +647,153 @@
           const data = await response.json();
 
           if (data.status === 'success') {
-            data.audio_files.forEach(file => {
+            // 显示完整的合并音频文件
+            if (data.result.complete_audio) {
+              const completeContainer = document.createElement('div');
+              completeContainer.className = 'audio-entry complete-audio';
+              completeContainer.style.backgroundColor = '#e8f5e9';
+              completeContainer.style.marginBottom = '20px';
+              completeContainer.style.padding = '15px';
+              completeContainer.style.borderRadius = '8px';
+              completeContainer.style.border = '1px solid #81c784';
+
+              const header = document.createElement('h4');
+              header.textContent = `完整音频 (包含全部 ${data.result.complete_audio.total_entries} 个词条)`;
+              header.style.marginBottom = '15px';
+              header.style.color = '#2e7d32';
+
+              const audio = document.createElement('audio');
+              audio.controls = true;
+              audio.src = data.result.complete_audio.path;
+              audio.style.width = '100%';
+
+              completeContainer.appendChild(header);
+              completeContainer.appendChild(audio);
+              audioContainer.appendChild(completeContainer);
+
+              // 添加分割线
+              const divider = document.createElement('hr');
+              divider.style.margin = '25px 0';
+              divider.style.borderTop = '1px dashed #ccc';
+              audioContainer.appendChild(divider);
+            }
+
+            // 显示分组音频
+            if (data.result.group_audio && data.result.group_audio.length > 0) {
+              const groupsContainer = document.createElement('div');
+              groupsContainer.className = 'group-audios';
+
+              const groupHeader = document.createElement('h4');
+              groupHeader.textContent = `分组音频 (${data.result.group_audio.length} 组)`;
+              groupHeader.style.marginBottom = '15px';
+              groupsContainer.appendChild(groupHeader);
+
+              // 创建手风琴容器
+              const accordion = document.createElement('div');
+              accordion.className = 'accordion';
+
+              data.result.group_audio.forEach(group => {
+                const groupItem = document.createElement('div');
+                groupItem.className = 'audio-entry';
+                groupItem.style.marginBottom = '10px';
+
+                // 组标题
+                const groupTitle = document.createElement('div');
+                groupTitle.className = 'group-title';
+                groupTitle.style.padding = '10px';
+                groupTitle.style.backgroundColor = '#f5f5f5';
+                groupTitle.style.cursor = 'pointer';
+                groupTitle.style.borderRadius = '4px';
+                groupTitle.style.display = 'flex';
+                groupTitle.style.justifyContent = 'space-between';
+                groupTitle.style.alignItems = 'center';
+
+                const titleText = document.createElement('span');
+                titleText.innerHTML = `<strong>组 ${group.group_id}</strong> - 包含 ${group.entries.length} 个词条`;
+
+                const toggleIcon = document.createElement('span');
+                toggleIcon.innerHTML = '&#9660;'; // 下箭头
+                toggleIcon.style.transition = 'transform 0.3s';
+
+                groupTitle.appendChild(titleText);
+                groupTitle.appendChild(toggleIcon);
+
+                // 组内容
+                const groupContent = document.createElement('div');
+                groupContent.className = 'group-content';
+                groupContent.style.padding = '15px';
+                groupContent.style.display = 'none';
+                groupContent.style.backgroundColor = '#fafafa';
+                groupContent.style.borderRadius = '0 0 4px 4px';
+
+                // 音频播放器
+                const audio = document.createElement('audio');
+                audio.controls = true;
+                audio.src = group.path;
+                audio.style.width = '100%';
+                audio.style.marginBottom = '10px';
+
+                // 词条列表
+                const entriesList = document.createElement('div');
+                entriesList.className = 'entries-list';
+                entriesList.style.fontSize = '0.9em';
+                entriesList.style.color = '#666';
+
+                const entriesHeader = document.createElement('p');
+                entriesHeader.innerHTML = '<strong>包含词条：</strong>';
+                entriesList.appendChild(entriesHeader);
+
+                const entriesText = document.createElement('p');
+                entriesText.textContent = group.entries.map(e => `${e.id}. ${e.character} (${e.pinyin})`).join(', ');
+                entriesList.appendChild(entriesText);
+
+                groupContent.appendChild(audio);
+                groupContent.appendChild(entriesList);
+
+                // 点击标题展开/收起内容
+                groupTitle.addEventListener('click', () => {
+                  const isVisible = groupContent.style.display === 'block';
+                  groupContent.style.display = isVisible ? 'none' : 'block';
+                  toggleIcon.style.transform = isVisible ? 'rotate(0deg)' : 'rotate(180deg)';
+                });
+
+                groupItem.appendChild(groupTitle);
+                groupItem.appendChild(groupContent);
+                accordion.appendChild(groupItem);
+              });
+
+              groupsContainer.appendChild(accordion);
+              audioContainer.appendChild(groupsContainer);
+
+              // 添加分割线
+              const divider = document.createElement('hr');
+              divider.style.margin = '25px 0';
+              divider.style.borderTop = '1px dashed #ccc';
+              audioContainer.appendChild(divider);
+            }
+
+            // 显示单独的词条音频
+            const individualContainer = document.createElement('div');
+            individualContainer.className = 'individual-audios';
+
+            const individualHeader = document.createElement('h4');
+            individualHeader.textContent = '单独词条音频';
+            individualHeader.style.marginBottom = '15px';
+
+            const toggleButton = document.createElement('button');
+            toggleButton.className = 'btn btn-sm btn-outline-secondary';
+            toggleButton.textContent = '显示单个词条';
+            toggleButton.style.marginLeft = '15px';
+
+            const individualList = document.createElement('div');
+            individualList.className = 'row';
+            individualList.style.display = 'none';
+
+            // 为每个词条创建音频播放器
+            data.result.individual_audio.forEach(file => {
+              const col = document.createElement('div');
+              col.className = 'col-md-6 col-lg-4 mb-3';
+
               const audioEntry = document.createElement('div');
               audioEntry.className = 'audio-entry';
 
@@ -621,8 +806,26 @@
 
               audioEntry.appendChild(label);
               audioEntry.appendChild(audio);
-              audioContainer.appendChild(audioEntry);
+              col.appendChild(audioEntry);
+              individualList.appendChild(col);
             });
+
+            // 点击按钮显示/隐藏单个词条
+            toggleButton.addEventListener('click', () => {
+              if (individualList.style.display === 'none') {
+                individualList.style.display = 'flex';
+                toggleButton.textContent = '隐藏单个词条';
+              } else {
+                individualList.style.display = 'none';
+                toggleButton.textContent = '显示单个词条';
+              }
+            });
+
+            individualHeader.appendChild(toggleButton);
+            individualContainer.appendChild(individualHeader);
+            individualContainer.appendChild(individualList);
+            audioContainer.appendChild(individualContainer);
+
           } else {
             audioContainer.innerHTML = `<div class="alert alert-danger">处理失败: ${data.message}</div>`;
           }

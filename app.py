@@ -9,6 +9,11 @@ import edge_tts
 import uuid
 import uvicorn
 import utils
+import logging
+
+# 设置日志
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
@@ -67,6 +72,19 @@ async def convert_file(
         await utils.convert_text_to_speech(segment, voice, rate, volume, pitch, output_filename)
         output_files.append(output_filename)
     
+    # 合并所有段落到一个音频文件
+    if output_files:
+        try:
+            merged_file = f"static/audio/merged_{uuid.uuid4()}.mp3"
+            merged_path = utils.merge_audio_files(output_files, merged_file)
+            return {
+                "audio_files": output_files,
+                "merged_file": merged_path
+            }
+        except Exception as e:
+            logger.error(f"合并音频文件失败: {str(e)}")
+            return {"audio_files": output_files}
+    
     return {"audio_files": output_files}
 
 @app.post("/process-shici")
@@ -80,8 +98,9 @@ async def process_shici(
     try:
         entries = utils.parse_shici_file("shici.txt")
         result = await utils.process_shici_entries(entries, voice, rate, volume, pitch)
-        return {"status": "success", "audio_files": result}
+        return {"status": "success", "result": result}
     except Exception as e:
+        logger.error(f"处理 shici.txt 失败: {str(e)}")
         return {"status": "error", "message": str(e)}
 
 @app.get("/available-voices")
