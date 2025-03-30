@@ -1,147 +1,164 @@
-# 文言文转语音工具
+# 古文语音合成工具
 
-这是一个使用 FastAPI 和 Edge TTS 构建的文言文转语音工具，可以将中文文本（尤其是文言文）转换为自然流畅的语音。该工具支持多种中文语音和语速、音量调节，适合学习文言文的发音或制作有声读物。
+这是一个基于 FastAPI 和 Edge TTS 的古文语音合成工具，可以将文言文转换为语音。
 
-## 功能特点
+## 特性
 
-- **多种语音转换模式**：
-  - 单段文本转语音测试
-  - 上传 TXT 文件批量转换（自动分段）
-  - 处理 shici.txt 文件（按条目自动分割并转换）
-- **语音参数调节**：
-  - 语速控制（-50% 到 +50%）
-  - 音量控制（轻声到高声）
-  - 多种中文发音人选择
-- **友好的用户界面**：
-  - 响应式设计，适配各种设备
-  - 文件拖放上传
-  - 音频实时预览
-  - 美观的卡片式布局
+- 单句文本转语音（不刷新页面）
+- 批量从 TXT 文件转换，支持批次号管理
+- 可调节语速、音量和音调
+- 自定义选择语音
+- 支持多用户同时处理不同文件
+- 批处理过程中可随时停止
+- 批次管理和自动清理功能
+- 响应式设计，适配移动设备
 
 ## 安装
 
-### 方法一：使用 pip 安装依赖
+### 前提条件
+- Python 3.7+
+- FFmpeg (用于音频合并，推荐但非必需)
 
-1. 克隆仓库
+### 步骤
+
+1. 克隆此仓库:
+   ```
+   git clone https://github.com/yourusername/shici.git
+   cd shici
+   ```
+
+2. 创建并激活虚拟环境:
+   ```
+   python -m venv venv
+   source venv/bin/activate  # Linux/Mac
+   venv\Scripts\activate     # Windows
+   ```
+
+3. 安装依赖:
+   ```
+   pip install -r requirements.txt
+   ```
+
+4. 启动应用:
+   ```
+   python app.py
+   ```
+   或者使用 uvicorn:
+   ```
+   uvicorn app:app --host 0.0.0.0 --port 8000 --reload
+   ```
+
+5. 打开浏览器访问 `http://localhost:8000`
+
+## 使用方法
+
+### 单句转换
+1. 在主页的文本框中输入要转换的文本
+2. 选择语音、调整速度、音量和音调
+3. 点击"转换"按钮（音频将直接在页面中播放，无需刷新）
+
+### 从文件批量转换
+1. 上传 TXT 文本文件
+2. 选择语音和参数
+3. 点击"转换"按钮
+4. 系统会生成一个唯一的批次号，并显示处理进度
+5. 可以通过批次号 URL (`/upload_file?no=batch_id`) 随时查看处理状态
+6. 处理过程中可点击"停止"按钮随时中断处理
+
+### 批次管理
+- 每个批次都有唯一的ID，可通过 URL 访问
+- 生成的音频按批次保存在独立目录中
+- 系统支持自动清理旧批次（默认7天）
+- 多用户可同时处理不同批次，互不干扰
+
+## 多用户支持
+
+系统支持多个用户同时使用：
+- 每个批处理任务有独立的批次ID和资源
+- 线程安全的WebSocket连接管理
+- 全局锁保证共享资源的安全访问
+- 不同批次的资源隔离，避免冲突
+
+## 调试模式
+
+系统支持调试模式，可通过环境变量 `DEBUG_MODE` 开启：
 
 ```bash
-git clone <repository-url>
-cd <repository-directory>
-```
+# Linux/Mac
+export DEBUG_MODE=true
+python app.py
 
-2. 安装依赖
+# Windows (PowerShell)
+$env:DEBUG_MODE="true"
+python app.py
 
-```bash
-pip install -r requirements.txt
-```
-
-3. 运行应用
-
-```bash
+# Windows (CMD)
+set DEBUG_MODE=true
 python app.py
 ```
 
-### 方法二：使用 Makefile（推荐）
+在调试模式下：
+- 日志级别会设为 DEBUG，输出更详细的信息
+- 日志格式会包含更多调试信息
+- 批处理过程中会记录每一个关键步骤
+- 所有日志同时写入文件 (app.log)
 
-使用提供的 Makefile 可以自动创建虚拟环境并管理应用生命周期：
+### 日志系统
 
-```bash
-# 显示可用命令
-make help
+系统有完善的日志系统：
+- 正常模式下只输出关键日志信息
+- 调试模式下输出详细的过程信息
+- 所有批处理过程都有进度和时间记录
+- 文件操作和音频合并过程有详细记录
+- 错误信息会被完整捕获并记录
 
-# 创建虚拟环境并启动应用
-make run
-
-# 停止应用
-make stop
-
-# 重启应用
-make restart
-
-# 清理环境和临时文件
-make clean
-```
-
-应用将在 http://localhost:8000 上运行。
-
-## 详细使用指南
-
-### 1. 测试文本转语音
-
-适合快速测试短文本的语音效果。
-
-1. 选择语音发音人
-2. 调整语速和音量滑块
-3. 在文本框中输入或粘贴要转换的文本
-4. 点击"转换"按钮
-5. 等待处理完成后，音频将显示在下方，可直接播放
-
-### 2. 上传文本文件转换
-
-适合处理较长的文本文件，会自动分段处理。
-
-1. 选择语音设置（发音人、语速）
-2. 设置分段大小（字符数，默认500）
-3. 将文件拖放到上传区或点击选择文件
-4. 点击"上传并转换"
-5. 处理完成后，分段音频将按顺序显示
-
-### 3. 处理 shici.txt 文件
-
-专为处理文言文词汇设计，将按词条自动分割并生成对应音频。
-
-1. 选择语音设置
-2. 点击"处理 shici.txt"按钮
-3. 处理完成后，每个词条将生成单独的音频，并显示词条编号和拼音
-
-## 文件结构
+## 项目结构
 
 ```
-├── app.py                # FastAPI 应用主文件
-├── utils.py              # 工具函数库
-├── requirements.txt      # 依赖列表
-├── Makefile              # 自动化脚本
-├── README.md             # 项目说明文档
-├── templates/            # HTML 模板
-│   └── index.html        # 前端页面
-├── static/               # 静态资源
-│   └── audio/            # 生成的音频文件保存目录
-└── shici.txt             # 文言文词汇示例文件
+shici/
+├── app.py            # FastAPI 应用主文件
+├── utils.py          # 工具函数，包含 TTS 和文件处理逻辑
+├── requirements.txt  # 项目依赖
+├── static/           # 静态文件
+│   └── audio/        # 生成的单句音频文件
+├── templates/        # HTML 模板
+│   └── index.html    # 主页模板
+├── uploads/          # 上传的文件
+└── batches/          # 批次处理目录
+    └── {batch_id}/   # 每个批次的独立目录
+        ├── info.json     # 批次信息
+        ├── complete.mp3  # 合并后的完整音频
+        └── audio/        # 批次音频片段
 ```
 
-## Edge TTS 语音选项
+## REST API
 
-应用默认提供以下中文语音选项：
+系统提供多个API端点：
 
-- zh-CN-XiaoxiaoNeural（默认，女声）
-- zh-CN-YunxiNeural（男声）
-- zh-CN-YunjianNeural（男声）
-- zh-CN-XiaoyiNeural（女声）
-- zh-CN-YunyangNeural（男声）
+- `POST /api/convert`: 单句文本转语音，返回JSON响应
+- `POST /api/stop_batch/{batch_id}`: 停止指定批次的处理
+- `POST /api/clean_old_batches`: 清理旧批次文件
 
-## 语速与音量控制
+## WebSocket
 
-- **语速**：可在 -50%（慢）到 +50%（快）之间调节，滑块中间位置为正常语速
-- **音量**：可在 -50%（轻）到 +50%（响）之间调节
+系统使用WebSocket提供实时进度更新：
 
-## 依赖项
+- 连接: `/ws/{batch_id}`
+- 消息类型: 
+  - `info`: 信息消息
+  - `error`: 错误消息
+  - `audio`: 音频片段生成
+  - `complete`: 处理完成
+  - `stopped`: 处理被停止
 
-- FastAPI (0.110.0): Web 框架
-- Uvicorn (0.27.1): ASGI 服务器
-- Edge TTS (6.1.9): 微软 Edge 浏览器的文本转语音引擎
-- Jinja2 (3.1.3): 模板引擎
-- Python-Multipart (0.0.9): 处理文件上传
+## 技术栈
 
-## 技术实现
+- FastAPI: Web 框架
+- Edge TTS: 微软 Edge 浏览器的文本转语音引擎
+- Jinja2: HTML 模板引擎
+- WebSockets: 实时通信
+- Pydub: 音频处理
 
-该项目使用 FastAPI 提供 Web 后端服务，结合 Edge TTS 实现高质量的文本转语音功能。前端使用纯 HTML、CSS 和 JavaScript 实现，具有现代化的响应式设计。
+## 许可
 
-## 问题排查
-
-1. **音频无法播放**：确保音频文件保存目录（static/audio）存在且有写入权限
-2. **文件上传失败**：检查上传文件的编码格式，建议使用 UTF-8
-3. **语音生成超时**：处理大量文本时可能需要较长时间，耐心等待或减小分段大小
-
-## 许可证
-
-MIT 许可证 
+MIT 
