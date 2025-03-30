@@ -1,0 +1,12 @@
+{
+  "batch_id": "4530ba3e-e20c-4b2b-b0bb-8fbd473e27e3",
+  "voice": "zh-CN-YunyangNeural",
+  "rate": "+0%",
+  "volume": "+0%",
+  "pitch": "+0Hz",
+  "file_name": "虚词.txt",
+  "file_location": "batches/4530ba3e-e20c-4b2b-b0bb-8fbd473e27e3/source_虚词.txt",
+  "created_at": "2025-03-30 19:22:47",
+  "status": "completed",
+  "updated_at": "2025-03-30 19:23:41"
+}

@@ -1,0 +1,12 @@
+{
+  "batch_id": "db4e1ed5-3d62-4bd4-bad2-8257bc4626d2",
+  "voice": "zh-CN-YunyangNeural",
+  "rate": "+0%",
+  "volume": "+0%",
+  "pitch": "+0Hz",
+  "file_name": "150个文言实词.txt",
+  "file_location": "batches/db4e1ed5-3d62-4bd4-bad2-8257bc4626d2/source_150个文言实词.txt",
+  "created_at": "2025-03-30 19:24:04",
+  "status": "completed",
+  "updated_at": "2025-03-30 19:34:52"
+}

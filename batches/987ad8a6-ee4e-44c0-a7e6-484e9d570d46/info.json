@@ -1,0 +1,12 @@
+{
+  "batch_id": "987ad8a6-ee4e-44c0-a7e6-484e9d570d46",
+  "voice": "zh-CN-YunyangNeural",
+  "rate": "+0%",
+  "volume": "+0%",
+  "pitch": "+0Hz",
+  "file_name": "常见通假字.txt",
+  "file_location": "batches/987ad8a6-ee4e-44c0-a7e6-484e9d570d46/source_常见通假字.txt",
+  "created_at": "2025-03-30 19:20:00",
+  "status": "completed",
+  "updated_at": "2025-03-30 19:20:18"
+}

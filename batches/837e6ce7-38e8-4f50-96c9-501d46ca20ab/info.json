@@ -1,0 +1,12 @@
+{
+  "batch_id": "837e6ce7-38e8-4f50-96c9-501d46ca20ab",
+  "voice": "zh-CN-YunyangNeural",
+  "rate": "+0%",
+  "volume": "+0%",
+  "pitch": "+0Hz",
+  "file_name": "词类活用.txt",
+  "file_location": "batches/837e6ce7-38e8-4f50-96c9-501d46ca20ab/source_词类活用.txt",
+  "created_at": "2025-03-30 19:21:52",
+  "status": "completed",
+  "updated_at": "2025-03-30 19:22:23"
+}
