@@ -551,19 +551,19 @@ async def websocket_endpoint(websocket: WebSocket, batch_id: str):
                 }))
                 return
             
-            # 分割文本为句子或段落
+            # 分割文本为段落，只按照\n\n分割
             segments = split_text_to_segments(text)
             total_segments = len(segments)
             
             await manager.send_message(batch_id, json.dumps({
                 "type": "info",
-                "message": f"文本已分割为 {total_segments} 个片段"
+                "message": f"文本已分割为 {total_segments} 个段落"
             }))
             
             # 更新状态为处理中
             update_batch_status(batch_id, "processing")
             
-            # 记录片段信息
+            # 记录段落信息
             segments_info = []
             for idx, segment in enumerate(segments):
                 segment_idx = idx + 1
@@ -577,11 +577,11 @@ async def websocket_endpoint(websocket: WebSocket, batch_id: str):
                         "timestamp": utils.get_current_time_str()
                     })
             
-            # 保存片段信息
+            # 保存段落信息
             with open(segments_file, "w", encoding="utf-8") as f:
                 json.dump(segments_info, f, ensure_ascii=False, indent=2)
             
-            # 处理每个文本片段并生成音频
+            # 处理每个文本段落并生成音频
             audio_files = []
             
             for idx, segment in enumerate(segments):
@@ -604,7 +604,7 @@ async def websocket_endpoint(websocket: WebSocket, batch_id: str):
                 if not segment_text:
                     continue
                 
-                # 更新片段状态为处理中
+                # 更新段落状态为处理中
                 if idx < len(segments_info):
                     segments_info[idx]["status"] = "processing"
                     segments_info[idx]["timestamp"] = utils.get_current_time_str()
@@ -616,7 +616,7 @@ async def websocket_endpoint(websocket: WebSocket, batch_id: str):
                 web_path = f"/batches/{batch_id}/audio/segment_{segment_idx}.mp3"
                 
                 try:
-                    # 转换文本片段为语音，并提供批次ID用于进程管理
+                    # 转换文本段落为语音，并提供批次ID用于进程管理
                     await utils.convert_text_to_speech(
                         segment_text, 
                         voice, 
@@ -630,7 +630,7 @@ async def websocket_endpoint(websocket: WebSocket, batch_id: str):
                     # 添加到音频文件列表
                     audio_files.append(output_filename)
                     
-                    # 更新片段状态为完成
+                    # 更新段落状态为完成
                     if idx < len(segments_info):
                         segments_info[idx]["status"] = "completed"
                         segments_info[idx]["timestamp"] = utils.get_current_time_str()
@@ -654,7 +654,7 @@ async def websocket_endpoint(websocket: WebSocket, batch_id: str):
                     
                 except Exception as e:
                     error_message = str(e)
-                    logger.error(f"转换片段 {segment_idx} 失败: {error_message}")
+                    logger.error(f"转换段落 {segment_idx} 失败: {error_message}")
                     
                     # 如果是停止请求导致的错误，则正常处理
                     if "处理已停止" in error_message:
@@ -663,7 +663,7 @@ async def websocket_endpoint(websocket: WebSocket, batch_id: str):
                             "message": "处理已停止"
                         }))
                         
-                        # 更新片段和批次状态
+                        # 更新段落和批次状态
                         if idx < len(segments_info):
                             segments_info[idx]["status"] = "stopped"
                             segments_info[idx]["timestamp"] = utils.get_current_time_str()
@@ -674,7 +674,7 @@ async def websocket_endpoint(websocket: WebSocket, batch_id: str):
                         return
                     
                     # 常规错误处理
-                    # 更新片段状态为错误
+                    # 更新段落状态为错误
                     if idx < len(segments_info):
                         segments_info[idx]["status"] = "error"
                         segments_info[idx]["error"] = error_message
@@ -684,7 +684,7 @@ async def websocket_endpoint(websocket: WebSocket, batch_id: str):
                     
                     await manager.send_message(batch_id, json.dumps({
                         "type": "error",
-                        "message": f"转换片段 {segment_idx} 失败: {error_message}"
+                        "message": f"转换段落 {segment_idx} 失败: {error_message}"
                     }))
                     
                     # 检查是否有致命错误需要中断整个处理
@@ -701,7 +701,7 @@ async def websocket_endpoint(websocket: WebSocket, batch_id: str):
             if audio_files:
                 await manager.send_message(batch_id, json.dumps({
                     "type": "info",
-                    "message": f"所有片段处理完成，正在合并 {len(audio_files)} 个音频文件..."
+                    "message": f"所有段落处理完成，正在合并 {len(audio_files)} 个音频文件..."
                 }))
                 
                 # 生成合并后的音频文件名
@@ -712,7 +712,7 @@ async def websocket_endpoint(websocket: WebSocket, batch_id: str):
                     # 合并音频文件
                     utils.merge_audio_files(audio_files, complete_filename)
                     
-                    # 更新所有片段为已合并状态
+                    # 更新所有段落为已合并状态
                     for segment in segments_info:
                         if segment["status"] == "completed":
                             segment["status"] = "merged"
@@ -811,7 +811,7 @@ async def check_and_send_batch_status(batch_id: str, websocket: WebSocket, batch
                     }))
                     return
                 
-                # 预先查找所有音频文件，按片段序号排序
+                # 预先查找所有音频文件，按段落序号排序
                 audio_files = []
                 if os.path.exists(batch_audio_dir):
                     for f in os.listdir(batch_audio_dir):
@@ -827,10 +827,10 @@ async def check_and_send_batch_status(batch_id: str, websocket: WebSocket, batch
                     if audio_files:
                         await manager.send_message(batch_id, json.dumps({
                             "type": "info",
-                            "message": f"找到 {len(audio_files)} 个已生成的音频片段"
+                            "message": f"找到 {len(audio_files)} 个已生成的音频段落"
                         }))
                 
-                # 如果有片段信息文件，读取详细信息
+                # 如果有段落信息文件，读取详细信息
                 segments_info = []
                 segments_file = os.path.join(batch_dir, "segments.json")
                 if os.path.exists(segments_file):
@@ -844,19 +844,19 @@ async def check_and_send_batch_status(batch_id: str, websocket: WebSocket, batch
                             
                             await manager.send_message(batch_id, json.dumps({
                                 "type": "info",
-                                "message": f"从片段信息恢复: 总计 {total_segments} 个片段，已完成 {completed_segments} 个"
+                                "message": f"从段落信息恢复: 总计 {total_segments} 个段落，已完成 {completed_segments} 个"
                             }))
                     except Exception as e:
-                        logger.error(f"读取片段信息失败: {str(e)}")
+                        logger.error(f"读取段落信息失败: {str(e)}")
                 
-                # 处理音频文件，发送已完成的片段
+                # 处理音频文件，发送已完成的段落
                 if audio_files:
-                    # 发送每个片段的信息
+                    # 发送每个段落的信息
                     for _, (segment_idx, file) in enumerate(audio_files):
                         web_path = f"/batches/{batch_id}/audio/{file}"
                         
                         # 尝试从segments.json获取文本信息
-                        segment_text = f"片段 {segment_idx}"
+                        segment_text = f"段落 {segment_idx}"
                         for seg_info in segments_info:
                             if seg_info.get("id") == segment_idx:
                                 segment_text = seg_info.get("text", segment_text)
@@ -864,7 +864,7 @@ async def check_and_send_batch_status(batch_id: str, websocket: WebSocket, batch
                         
                         total_segs = len(segments_info) or len(audio_files)
                         
-                        # 发送音频数据，标记为恢复的片段
+                        # 发送音频数据，标记为恢复的段落
                         await manager.send_message(batch_id, json.dumps({
                             "type": "audio",
                             "data": {
@@ -874,7 +874,7 @@ async def check_and_send_batch_status(batch_id: str, websocket: WebSocket, batch
                                 "segment_idx": segment_idx,
                                 "total_segments": total_segs
                             },
-                            "is_restored": True  # 标记为恢复的片段
+                            "is_restored": True  # 标记为恢复的段落
                         }))
                     
                     # 如果合并文件存在，发送完成信息
@@ -1040,41 +1040,19 @@ def update_batch_status(batch_id: str, status: str, error_message: str = None):
 
 def split_text_to_segments(text: str) -> List[str]:
     """
-    将文本分割为句子或段落
+    将文本分割为段落，只按照\n\n分割
     
     Args:
         text: 要分割的文本
         
     Returns:
-        文本片段列表
+        文本段落列表
     """
-    # 首先按段落分割
+    # 按段落分割（双换行符）
     paragraphs = text.split('\n\n')
-    segments = []
     
-    for para in paragraphs:
-        if not para.strip():
-            continue
-            
-        # 检查段落长度，如果太长，进一步分割为句子
-        if len(para) > 500:
-            # 按句号、问号、感叹号等分割为句子
-            sentences = re.split(r'([。！？；.!?;])', para)
-            
-            # 重新组合句子（保留分隔符）
-            i = 0
-            while i < len(sentences) - 1:
-                if i + 1 < len(sentences):
-                    segments.append(sentences[i] + sentences[i+1])
-                    i += 2
-                else:
-                    segments.append(sentences[i])
-                    i += 1
-        else:
-            segments.append(para)
-    
-    # 处理空片段
-    segments = [s for s in segments if s.strip()]
+    # 过滤掉空段落
+    segments = [para for para in paragraphs if para.strip()]
     
     return segments
 

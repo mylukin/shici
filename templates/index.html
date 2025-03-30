@@ -541,7 +541,7 @@
       <div id="logContainer" class="log-container"></div>
 
       <!-- 音频列表 -->
-      <h4>生成的音频片段</h4>
+      <h4>生成的音频段落</h4>
       <div id="audioCards" class="audio-cards"></div>
 
       <!-- 完整音频 -->
@@ -656,7 +656,7 @@
 
         const title = document.createElement('div');
         title.className = 'audio-card-title';
-        title.textContent = `片段 ${audioInfo.id}: ${audioInfo.text}`;
+        title.textContent = `段落 ${audioInfo.id}: ${audioInfo.text}`;
 
         const audio = document.createElement('audio');
         audio.controls = true;
@@ -716,7 +716,7 @@
         // 添加音频内容
         const meta = document.createElement('div');
         meta.className = 'audio-meta';
-        meta.innerHTML = `<p>包含 ${audioInfo.total_segments} 个片段，文件大小: ${Math.round(audioInfo.file_size_kb * 10) / 10} KB</p>`;
+        meta.innerHTML = `<p>包含 ${audioInfo.total_segments} 个段落，文件大小: ${Math.round(audioInfo.file_size_kb * 10) / 10} KB</p>`;
 
         const audio = document.createElement('audio');
         audio.controls = true;
@@ -803,7 +803,7 @@
 
             // 只有不是恢复的片段才添加日志，避免刷新页面后重复记录
             if (!message.is_restored) {
-              addLog(`生成音频片段 ${message.data.id}`);
+              addLog(`生成音频段落 ${message.data.id}`);
             }
 
             // 明确更新进度条
@@ -859,7 +859,7 @@
       <div class="card">
         <h4>完整音频</h4>
         <div class="audio-meta">
-          <p>包含 {{ complete_audio.total_segments }} 个片段，文件大小: {{ complete_audio.file_size_kb|round(1) if
+          <p>包含 {{ complete_audio.total_segments }} 个段落，文件大小: {{ complete_audio.file_size_kb|round(1) if
             complete_audio.file_size_kb else '未知' }} KB</p>
         </div>
         <audio controls>
