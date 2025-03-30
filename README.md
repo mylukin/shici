@@ -34,20 +34,25 @@
 git clone https://github.com/mylukin/shici.git
 cd shici
 
-# 初始化Edge TTS子模块
+# 初始化子模块
 git submodule init
 git submodule update
 
-# 安装依赖
-python -m venv venv
-source venv/bin/activate  # Linux/Mac或venv\Scripts\activate (Windows)
-pip install -r requirements.txt
-
-# 启动应用
-python app.py  # 或uvicorn app:app --host 0.0.0.0 --port 8000 --reload
+# 安装依赖并启动
+make install  # 创建虚拟环境并安装依赖
+make run      # 启动应用
 ```
 
 访问 `http://localhost:8000` 开始使用
+
+### 其他常用命令
+
+```bash
+make debug    # 以调试模式启动
+make stop     # 停止应用
+make restart  # 重启应用
+make clean    # 清理生成的文件和虚拟环境
+```
 
 ## 使用指南
 
