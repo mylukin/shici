@@ -58,49 +58,23 @@ def parse_shici_file(file_path: str) -> List[Dict[str, str]]:
     
     return entries
 
-def group_entries_for_tts(entries: List[Dict[str, str]], max_chars: int = 8000) -> List[List[Dict[str, str]]]:
+def group_entries_by_count(entries: List[Dict[str, str]], group_size: int = 10) -> List[List[Dict[str, str]]]:
     """
-    将词条分组，每组不超过最大字符数限制
+    将词条按照固定数量分组，每组包含指定数量的词条
     
     Args:
         entries: 词条列表
-        max_chars: 每组最大字符数
+        group_size: 每组词条数量，默认为10
     
     Returns:
         分组后的词条列表
     """
     groups = []
-    current_group = []
-    current_length = 0
+    for i in range(0, len(entries), group_size):
+        group = entries[i:i + group_size]
+        groups.append(group)
     
-    for entry in entries:
-        entry_length = len(entry["content"])
-        
-        # 如果单个条目超过最大长度，需要单独处理
-        if entry_length > max_chars:
-            # 如果当前组不为空，先添加
-            if current_group:
-                groups.append(current_group)
-                current_group = []
-                current_length = 0
-            
-            # 将过长的条目单独作为一组
-            groups.append([entry])
-            continue
-        
-        # 如果添加当前条目后超过最大长度，创建新组
-        if current_length + entry_length > max_chars:
-            groups.append(current_group)
-            current_group = [entry]
-            current_length = entry_length
-        else:
-            current_group.append(entry)
-            current_length += entry_length
-    
-    # 添加最后一组
-    if current_group:
-        groups.append(current_group)
-    
+    logger.info(f"将 {len(entries)} 个词条按每组 {group_size} 个分成了 {len(groups)} 组")
     return groups
 
 async def convert_text_to_speech(text: str, voice: str, rate: str = "+0%", volume: str = "+0%", pitch: str = "+0Hz", output_path: str = None) -> str:
@@ -231,13 +205,13 @@ async def process_shici_entries(entries: List[Dict[str, str]], voice: str, rate:
     """
     os.makedirs(output_dir, exist_ok=True)
     
-    # 将词条分组
-    grouped_entries = group_entries_for_tts(entries)
-    logger.info(f"将 {len(entries)} 个词条分成了 {len(grouped_entries)} 组")
+    # 将词条按照每组10个分组
+    grouped_entries = group_entries_by_count(entries, 10)
     
     # 处理每组词条
     merged_results = []
     individual_results = []
+    group_audio_files = []
     
     for group_idx, group in enumerate(grouped_entries):
         # 准备该组的合并文本
@@ -246,6 +220,7 @@ async def process_shici_entries(entries: List[Dict[str, str]], voice: str, rate:
         # 每组生成一个合并的音频文件
         group_filename = f"{output_dir}/shici_group_{group_idx+1}_{uuid.uuid4()}.mp3"
         await convert_text_to_speech(group_text, voice, rate, volume, pitch, group_filename)
+        group_audio_files.append(group_filename)
         
         # 记录该组信息
         merged_results.append({
@@ -268,12 +243,12 @@ async def process_shici_entries(entries: List[Dict[str, str]], voice: str, rate:
     
     # 生成一个包含所有词条的完整音频
     if grouped_entries:
-        all_group_files = [group["path"] for group in merged_results]
         complete_filename = f"{output_dir}/shici_complete_{uuid.uuid4()}.mp3"
         
         try:
             # 使用改进的合并方法合并所有组音频
-            complete_path = merge_audio_files(all_group_files, complete_filename)
+            logger.info(f"开始合并 {len(group_audio_files)} 个组音频文件到完整音频")
+            complete_path = merge_audio_files(group_audio_files, complete_filename)
             
             return {
                 "complete_audio": {
