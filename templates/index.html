@@ -755,8 +755,12 @@
       socket.onopen = function (e) {
         addLog('WebSocket连接已建立，正在获取批次状态...');
 
-        // 检测是否为页面刷新（所有页面访问都视为刷新，确保安全）
-        const isPageRefresh = true;
+        // 检查URL参数，判断是否为新创建的批次（无no参数说明是新创建的批次）
+        const urlParams = new URLSearchParams(window.location.search);
+        const isNewBatch = !urlParams.has('no');
+
+        // 只有在非新创建批次的情况下才标记为刷新
+        const isPageRefresh = !isNewBatch;
 
         // 发送初始参数
         socket.send(JSON.stringify({
@@ -765,7 +769,7 @@
           volume: currentVolume,
           pitch: currentPitch,
           file_location: fileLocation,
-          refresh: isPageRefresh // 标记为页面刷新，确保不会重新开始处理
+          refresh: isPageRefresh // 新批次不标记为刷新，确保能够开始处理
         }));
       };
 
@@ -796,7 +800,11 @@
             }
 
             addAudioCard(message.data);
-            addLog(`生成音频片段 ${message.data.id}`);
+
+            // 只有不是恢复的片段才添加日志，避免刷新页面后重复记录
+            if (!message.is_restored) {
+              addLog(`生成音频片段 ${message.data.id}`);
+            }
 
             // 明确更新进度条
             if (message.data.segment_idx && message.data.total_segments) {
