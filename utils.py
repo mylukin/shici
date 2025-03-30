@@ -4,9 +4,9 @@ import asyncio
 import edge_tts
 import uuid
 from typing import List, Dict, Any
-from pydub import AudioSegment
 import tempfile
 import logging
+import subprocess
 
 # 设置日志
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -129,7 +129,7 @@ async def convert_text_to_speech(text: str, voice: str, rate: str = "+0%", volum
 
 def merge_audio_files(audio_files: List[str], output_file: str) -> str:
     """
-    合并多个音频文件为一个
+    合并多个音频文件为一个，使用二进制拼接方法
     
     Args:
         audio_files: 要合并的音频文件路径列表
@@ -146,29 +146,73 @@ def merge_audio_files(audio_files: List[str], output_file: str) -> str:
         return audio_files[0]
     
     try:
-        # 合并所有音频文件
-        combined = AudioSegment.empty()
-        for audio_file in audio_files:
-            sound = AudioSegment.from_mp3(audio_file)
-            combined += sound
+        # 尝试使用 ffmpeg 合并文件
+        if is_ffmpeg_available():
+            return merge_with_ffmpeg(audio_files, output_file)
         
-        # 导出合并后的文件
-        combined.export(output_file, format="mp3")
+        # 如果 ffmpeg 不可用，使用二进制文件拼接方法
+        logger.info(f"使用二进制拼接方法合并 {len(audio_files)} 个音频文件")
+        with open(output_file, 'wb') as outfile:
+            for audio_file in audio_files:
+                if os.path.exists(audio_file):
+                    with open(audio_file, 'rb') as infile:
+                        outfile.write(infile.read())
         
-        # 记录日志
         logger.info(f"合并了 {len(audio_files)} 个音频文件到 {output_file}")
-        
-        # 删除原始文件（可选）
-        # for audio_file in audio_files:
-        #     if os.path.exists(audio_file):
-        #         os.remove(audio_file)
-        
         return output_file
     
     except Exception as e:
         logger.error(f"合并音频文件失败: {str(e)}")
         # 如果合并失败，返回第一个文件
         return audio_files[0]
+
+def is_ffmpeg_available() -> bool:
+    """检查系统中是否可用 ffmpeg"""
+    try:
+        result = subprocess.run(['ffmpeg', '-version'], 
+                             stdout=subprocess.PIPE, 
+                             stderr=subprocess.PIPE,
+                             text=True)
+        return result.returncode == 0
+    except Exception:
+        return False
+
+def merge_with_ffmpeg(audio_files: List[str], output_file: str) -> str:
+    """使用 ffmpeg 合并音频文件"""
+    try:
+        # 创建临时文件列表
+        with tempfile.NamedTemporaryFile('w', suffix='.txt', delete=False) as f:
+            list_file = f.name
+            for audio_file in audio_files:
+                f.write(f"file '{os.path.abspath(audio_file)}'\n")
+        
+        # 调用 ffmpeg 合并文件
+        cmd = [
+            'ffmpeg', 
+            '-f', 'concat', 
+            '-safe', '0', 
+            '-i', list_file, 
+            '-c', 'copy', 
+            output_file
+        ]
+        
+        subprocess.run(cmd, check=True)
+        
+        # 删除临时文件
+        os.unlink(list_file)
+        
+        logger.info(f"使用 ffmpeg 合并了 {len(audio_files)} 个音频文件到 {output_file}")
+        return output_file
+    
+    except Exception as e:
+        logger.error(f"使用 ffmpeg 合并失败: {str(e)}")
+        # 如果 ffmpeg 失败，尝试使用二进制拼接
+        with open(output_file, 'wb') as outfile:
+            for audio_file in audio_files:
+                if os.path.exists(audio_file):
+                    with open(audio_file, 'rb') as infile:
+                        outfile.write(infile.read())
+        return output_file
 
 async def process_shici_entries(entries: List[Dict[str, str]], voice: str, rate: str = "+0%", volume: str = "+0%", pitch: str = "+0Hz", output_dir: str = "static/audio") -> Dict[str, Any]:
     """
@@ -228,7 +272,7 @@ async def process_shici_entries(entries: List[Dict[str, str]], voice: str, rate:
         complete_filename = f"{output_dir}/shici_complete_{uuid.uuid4()}.mp3"
         
         try:
-            # 使用 pydub 合并所有组音频
+            # 使用改进的合并方法合并所有组音频
             complete_path = merge_audio_files(all_group_files, complete_filename)
             
             return {
