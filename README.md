@@ -1,186 +1,101 @@
 # 古文语音合成工具
 
-这是一个基于 FastAPI 和 Edge TTS 的古文语音合成工具，可以将文言文转换为语音。
+一款专为中国古典文学爱好者设计的语音合成工具，能将古诗词、文言文等转换为自然流畅的语音。基于微软Edge TTS引擎，提供高质量的中文语音合成服务。
 
-## 特性
+## 主要功能
 
-- 单句文本转语音（不刷新页面）
-- 批量从 TXT 文件转换，支持批次号管理
-- 可调节语速、音量和音调
-- 自定义选择语音
-- 支持多用户同时处理不同文件
-- 批处理过程中可随时停止
-- 批次管理和自动清理功能
-- 响应式设计，适配移动设备
+- **单句转换**：在网页界面直接输入文本，即时转换并播放
+- **批量处理**：上传TXT文件，一次性转换整篇古文
+- **语音定制**：多种中文音色选择，可调节语速、音量和音调
+- **批次管理**：每个转换任务分配唯一ID，支持断点续传和状态查询
+- **实时反馈**：WebSocket实时显示转换进度和生成音频
+- **响应式设计**：自适应PC和移动设备的界面布局
 
-## 安装
+## 技术实现
 
-### 前提条件
+- **前端**：原生HTML/CSS/JavaScript，响应式设计
+- **后端**：基于FastAPI的异步处理框架
+- **语音引擎**：Edge TTS作为Git子模块集成
+- **实时通信**：WebSocket提供转换进度和状态反馈
+- **并发处理**：支持多用户同时处理不同批次
+- **资源管理**：线程安全的批次锁和全局锁机制
+- **音频处理**：集成FFmpeg/Pydub进行音频合并
+
+## 开始使用
+
+### 环境要求
 - Python 3.7+
-- FFmpeg (用于音频合并，推荐但非必需)
+- FFmpeg (推荐但非必需)
 
-### 步骤
-
-1. 克隆此仓库:
-   ```
-   git clone https://github.com/mylukin/shici.git
-   cd shici
-   ```
-
-2. 初始化并更新子模块:
-   ```
-   git submodule init
-   git submodule update
-   ```
-
-3. 创建并激活虚拟环境:
-   ```
-   python -m venv venv
-   source venv/bin/activate  # Linux/Mac
-   venv\Scripts\activate     # Windows
-   ```
-
-4. 安装依赖:
-   ```
-   pip install -r requirements.txt
-   ```
-
-5. 启动应用:
-   ```
-   python app.py
-   ```
-   或者使用 uvicorn:
-   ```
-   uvicorn app:app --host 0.0.0.0 --port 8000 --reload
-   ```
-
-6. 打开浏览器访问 `http://localhost:8000`
-
-## 使用方法
-
-### 单句转换
-1. 在主页的文本框中输入要转换的文本
-2. 选择语音、调整速度、音量和音调
-3. 点击"转换"按钮（音频将直接在页面中播放，无需刷新）
-
-### 从文件批量转换
-1. 上传 TXT 文本文件
-2. 选择语音和参数
-3. 点击"转换"按钮
-4. 系统会生成一个唯一的批次号，并显示处理进度
-5. 可以通过批次号 URL (`/upload_file?no=batch_id`) 随时查看处理状态
-6. 处理过程中可点击"停止"按钮随时中断处理
-
-### 批次管理
-- 每个批次都有唯一的ID，可通过 URL 访问
-- 生成的音频按批次保存在独立目录中
-- 系统支持自动清理旧批次（默认7天）
-- 多用户可同时处理不同批次，互不干扰
-
-## 多用户支持
-
-系统支持多个用户同时使用：
-- 每个批处理任务有独立的批次ID和资源
-- 线程安全的WebSocket连接管理
-- 全局锁保证共享资源的安全访问
-- 不同批次的资源隔离，避免冲突
-
-## 调试模式
-
-系统支持调试模式，可通过环境变量 `DEBUG_MODE` 开启：
+### 安装步骤
 
 ```bash
-# Linux/Mac
-export DEBUG_MODE=true
-python app.py
+# 克隆项目
+git clone https://github.com/mylukin/shici.git
+cd shici
 
-# Windows (PowerShell)
-$env:DEBUG_MODE="true"
-python app.py
+# 初始化Edge TTS子模块
+git submodule init
+git submodule update
 
-# Windows (CMD)
-set DEBUG_MODE=true
-python app.py
+# 安装依赖
+python -m venv venv
+source venv/bin/activate  # Linux/Mac或venv\Scripts\activate (Windows)
+pip install -r requirements.txt
+
+# 启动应用
+python app.py  # 或uvicorn app:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-在调试模式下：
-- 日志级别会设为 DEBUG，输出更详细的信息
-- 日志格式会包含更多调试信息
-- 批处理过程中会记录每一个关键步骤
-- 所有日志同时写入文件 (app.log)
+访问 `http://localhost:8000` 开始使用
 
-### 日志系统
+## 使用指南
 
-系统有完善的日志系统：
-- 正常模式下只输出关键日志信息
-- 调试模式下输出详细的过程信息
-- 所有批处理过程都有进度和时间记录
-- 文件操作和音频合并过程有详细记录
-- 错误信息会被完整捕获并记录
+### 单句转换
+1. 在"文本转语音"标签页中输入文本
+2. 选择中文音色，调整语速、音量和音调
+3. 点击"转换"按钮，音频将在页面中直接播放
 
-## Edge TTS 子模块
+### 批量转换
+1. 切换到"批量文件转换"标签页
+2. 上传包含文本内容的TXT文件
+3. 选择转换参数，点击"开始转换"
+4. 系统生成批次ID，实时显示处理进度
+5. 可通过批次链接随时查看或分享结果
 
-本项目使用 Edge TTS 作为语音合成引擎，它作为 Git 子模块集成到项目中：
+### 批次功能
+- 每个批次有唯一URL，可随时访问：`/upload_file?no=<批次ID>`
+- 支持随时停止处理：点击"停止处理"按钮
+- 处理完成后自动合并所有音频片段
+- 支持下载单个段落或完整合并后的音频
 
-### 关于 Edge TTS
-- Edge TTS 是一个允许使用微软 Edge 浏览器在线文本转语音服务的 Python 模块
-- 提供高质量的多语言语音合成能力，支持中文在内的多种语言
-- 允许调整语速、音量和音调
-- 支持生成音频文件和字幕文件
+## API接口
 
-### 子模块管理
-- 子模块路径：`edge-tts/`
-- 初始化：使用 `git submodule init` 和 `git submodule update` 命令
-- 更新：使用 `git submodule update --remote` 命令获取最新版本
+系统提供以下API端点：
 
-## 项目结构
+- `POST /api/convert`：单句文本转语音
+- `POST /api/stop_batch/{batch_id}`：停止指定批次
+- `POST /api/clean_old_batches`：清理过期批次
+- `WebSocket /ws/{batch_id}`：获取批次实时处理状态
+
+## 目录结构
 
 ```
 shici/
-├── app.py            # FastAPI 应用主文件
-├── utils.py          # 工具函数，包含 TTS 和文件处理逻辑
-├── requirements.txt  # 项目依赖
-├── edge-tts/         # Edge TTS 子模块
-├── static/           # 静态文件
-│   └── audio/        # 生成的单句音频文件
-├── templates/        # HTML 模板
-│   └── index.html    # 主页模板
-├── uploads/          # 上传的文件
-└── batches/          # 批次处理目录
+├── app.py            # 主应用入口，路由和处理逻辑
+├── utils.py          # 工具函数，TTS和文件处理
+├── edge-tts/         # Edge TTS引擎(子模块)
+├── static/           # 静态资源
+├── templates/        # HTML模板
+│   └── index.html    # 主界面
+├── uploads/          # 上传文件临时存储
+└── batches/          # 批次处理文件和结果
     └── {batch_id}/   # 每个批次的独立目录
-        ├── info.json     # 批次信息
+        ├── info.json     # 批次信息和状态
+        ├── segments.json # 段落处理信息
         ├── complete.mp3  # 合并后的完整音频
-        └── audio/        # 批次音频片段
+        └── audio/        # 分段音频文件
 ```
-
-## REST API
-
-系统提供多个API端点：
-
-- `POST /api/convert`: 单句文本转语音，返回JSON响应
-- `POST /api/stop_batch/{batch_id}`: 停止指定批次的处理
-- `POST /api/clean_old_batches`: 清理旧批次文件
-
-## WebSocket
-
-系统使用WebSocket提供实时进度更新：
-
-- 连接: `/ws/{batch_id}`
-- 消息类型: 
-  - `info`: 信息消息
-  - `error`: 错误消息
-  - `audio`: 音频片段生成
-  - `complete`: 处理完成
-  - `stopped`: 处理被停止
-
-## 技术栈
-
-- FastAPI: Web 框架
-- Edge TTS: 微软 Edge 浏览器的文本转语音引擎
-- Jinja2: HTML 模板引擎
-- WebSockets: 实时通信
-- Pydub/FFmpeg: 音频处理
-- psutil: 进程管理和监控
 
 ## 许可
 
