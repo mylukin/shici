@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="zh">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>文言文转语音</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    :root {
+      --primary-color: #4a6fa5;
+      --secondary-color: #54b689;
+      --bg-color: #f9f9f9;
+      --card-bg: #ffffff;
+      --border-color: #e0e0e0;
+    }
+
+    body {
+      font-family: "Noto Sans SC", "Helvetica Neue", Arial, sans-serif;
+      line-height: 1.6;
+      margin: 0;
+      padding: 0;
+      background-color: var(--bg-color);
+      color: #333;
+    }
+
+    .header {
+      background-color: var(--primary-color);
+      color: white;
+      padding: 2rem 0;
+      text-align: center;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    .header h1 {
+      margin: 0;
+      font-size: 2.2rem;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+
+    .card {
+      background-color: var(--card-bg);
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+      margin-bottom: 20px;
+      border: 1px solid var(--border-color);
+      overflow: hidden;
+    }
+
+    .card-header {
+      background-color: var(--primary-color);
+      color: white;
+      padding: 15px 20px;
+      font-weight: 500;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .card-body {
+      padding: 20px;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 150px;
+      padding: 12px;
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      font-size: 16px;
+      resize: vertical;
+      transition: border-color 0.2s;
+    }
+
+    textarea:focus {
+      border-color: var(--primary-color);
+      outline: none;
+      box-shadow: 0 0 0 2px rgba(74, 111, 165, 0.2);
+    }
+
+    .btn-primary {
+      background-color: var(--primary-color);
+      border-color: var(--primary-color);
+      padding: 10px 20px;
+      font-weight: 500;
+      transition: all 0.2s;
+    }
+
+    .btn-primary:hover {
+      background-color: #3a5a8c;
+      border-color: #3a5a8c;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    .form-label {
+      font-weight: 500;
+      margin-bottom: 8px;
+      color: #444;
+    }
+
+    .form-select,
+    .form-control {
+      padding: 10px;
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      transition: all 0.2s;
+    }
+
+    .form-select:focus,
+    .form-control:focus {
+      border-color: var(--primary-color);
+      box-shadow: 0 0 0 2px rgba(74, 111, 165, 0.2);
+    }
+
+    .settings-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 15px;
+      margin-bottom: 15px;
+    }
+
+    .settings-col {
+      flex: 1;
+      min-width: 200px;
+    }
+
+    .audio-container {
+      margin-top: 20px;
+      border-top: 1px solid var(--border-color);
+      padding-top: 20px;
+    }
+
+    .audio-entry {
+      margin-bottom: 15px;
+      padding: 15px;
+      background-color: #f5f8fb;
+      border-radius: 6px;
+      border-left: 4px solid var(--secondary-color);
+    }
+
+    .audio-entry p {
+      margin-bottom: 10px;
+      font-weight: 500;
+      color: #444;
+    }
+
+    audio {
+      width: 100%;
+      margin-top: 5px;
+      border-radius: 30px;
+    }
+
+    .spinner {
+      width: 40px;
+      height: 40px;
+      margin: 15px auto;
+      border: 4px solid rgba(74, 111, 165, 0.2);
+      border-top-color: var(--primary-color);
+      border-radius: 50%;
+      animation: spin 1s ease-in-out infinite;
+      display: none;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    .slider-container {
+      margin-bottom: 10px;
+    }
+
+    .range-label {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 5px;
+    }
+
+    input[type="range"] {
+      width: 100%;
+      height: 8px;
+      border-radius: 4px;
+      background: #e0e0e0;
+      outline: none;
+      transition: background 0.2s;
+      -webkit-appearance: none;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: var(--primary-color);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    input[type="range"]::-webkit-slider-thumb:hover {
+      transform: scale(1.1);
+    }
+
+    .range-value {
+      font-weight: bold;
+      color: var(--primary-color);
+    }
+
+    .file-drop-area {
+      border: 2px dashed var(--border-color);
+      border-radius: 8px;
+      padding: 25px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+      margin-bottom: 15px;
+    }
+
+    .file-drop-area:hover,
+    .file-drop-area.dragover {
+      border-color: var(--primary-color);
+      background-color: rgba(74, 111, 165, 0.05);
+    }
+
+    .file-drop-icon {
+      font-size: 2.5rem;
+      color: var(--primary-color);
+      margin-bottom: 10px;
+    }
+
+    .footer {
+      text-align: center;
+      padding: 20px;
+      margin-top: 40px;
+      border-top: 1px solid var(--border-color);
+      color: #666;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="header">
+    <h1>文言文转语音工具</h1>
+    <p class="mb-0">使用 Edge TTS 将文言文转换为流畅的中文语音</p>
+  </div>
+
+  <div class="container">
+    <div class="card">
+      <div class="card-header">
+        <h2 class="h5 mb-0">测试文本转语音</h2>
+      </div>
+      <div class="card-body">
+        <div class="settings-row">
+          <div class="settings-col">
+            <label for="voice-select" class="form-label">选择语音：</label>
+            <select id="voice-select" class="form-select">
+              {% for voice in voices %}
+              <option value="{{ voice }}">{{ voice }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="settings-col">
+            <label class="form-label">语速控制：</label>
+            <div class="slider-container">
+              <div class="range-label">
+                <span>慢</span>
+                <span class="range-value" id="rate-value">正常</span>
+                <span>快</span>
+              </div>
+              <input type="range" id="rate-slider" min="-50" max="50" value="0" class="form-range">
+              <input type="hidden" id="rate-input" value="+0%">
+            </div>
+          </div>
+          <div class="settings-col">
+            <label class="form-label">音量控制：</label>
+            <div class="slider-container">
+              <div class="range-label">
+                <span>轻</span>
+                <span class="range-value" id="volume-value">正常</span>
+                <span>响</span>
+              </div>
+              <input type="range" id="volume-slider" min="-50" max="50" value="0" class="form-range">
+              <input type="hidden" id="volume-input" value="+0%">
+            </div>
+          </div>
+        </div>
+
+        <div class="mb-3">
+          <textarea id="test-text" class="form-control" placeholder="在此粘贴要转换的文本..."></textarea>
+        </div>
+
+        <button id="convert-btn" class="btn btn-primary">
+          <i class="bi bi-soundwave"></i> 转换
+        </button>
+
+        <div id="spinner-test" class="spinner"></div>
+        <div id="audio-test" class="audio-container"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="h5 mb-0">上传文本文件</h2>
+      </div>
+      <div class="card-body">
+        <div class="settings-row">
+          <div class="settings-col">
+            <label for="voice-select-file" class="form-label">选择语音：</label>
+            <select id="voice-select-file" class="form-select">
+              {% for voice in voices %}
+              <option value="{{ voice }}">{{ voice }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="settings-col">
+            <label class="form-label">语速控制：</label>
+            <div class="slider-container">
+              <div class="range-label">
+                <span>慢</span>
+                <span class="range-value" id="rate-value-file">正常</span>
+                <span>快</span>
+              </div>
+              <input type="range" id="rate-slider-file" min="-50" max="50" value="0" class="form-range">
+              <input type="hidden" id="rate-input-file" value="+0%">
+            </div>
+          </div>
+          <div class="settings-col">
+            <label for="segment-size" class="form-label">分段大小（字符）：</label>
+            <input type="number" id="segment-size" class="form-control" value="500" min="100" max="2000">
+          </div>
+        </div>
+
+        <div class="file-drop-area" id="file-drop-area">
+          <div class="file-drop-icon">📄</div>
+          <p>拖放文件到此处 或 点击选择文件</p>
+          <input type="file" id="file-input" accept=".txt" class="d-none">
+        </div>
+
+        <button id="upload-btn" class="btn btn-primary">
+          <i class="bi bi-cloud-upload"></i> 上传并转换
+        </button>
+
+        <div id="spinner-file" class="spinner"></div>
+        <div id="audio-file" class="audio-container"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="h5 mb-0">处理 shici.txt 文件</h2>
+      </div>
+      <div class="card-body">
+        <div class="settings-row">
+          <div class="settings-col">
+            <label for="voice-select-shici" class="form-label">选择语音：</label>
+            <select id="voice-select-shici" class="form-select">
+              {% for voice in voices %}
+              <option value="{{ voice }}">{{ voice }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="settings-col">
+            <label class="form-label">语速控制：</label>
+            <div class="slider-container">
+              <div class="range-label">
+                <span>慢</span>
+                <span class="range-value" id="rate-value-shici">正常</span>
+                <span>快</span>
+              </div>
+              <input type="range" id="rate-slider-shici" min="-50" max="50" value="0" class="form-range">
+              <input type="hidden" id="rate-input-shici" value="+0%">
+            </div>
+          </div>
+          <div class="settings-col">
+            <label class="form-label">音量控制：</label>
+            <div class="slider-container">
+              <div class="range-label">
+                <span>轻</span>
+                <span class="range-value" id="volume-value-shici">正常</span>
+                <span>响</span>
+              </div>
+              <input type="range" id="volume-slider-shici" min="-50" max="50" value="0" class="form-range">
+              <input type="hidden" id="volume-input-shici" value="+0%">
+            </div>
+          </div>
+        </div>
+
+        <button id="process-shici-btn" class="btn btn-primary">
+          <i class="bi bi-list-check"></i> 处理 shici.txt
+        </button>
+
+        <div id="spinner-shici" class="spinner"></div>
+        <div id="audio-shici" class="audio-container"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <p>© 2023 文言文转语音工具 | 使用 Edge TTS 技术提供支持</p>
+  </div>
+
+  <script>
+    // 初始化滑块控件
+    function initSlider(sliderId, valueId, inputId) {
+      const slider = document.getElementById(sliderId);
+      const valueDisplay = document.getElementById(valueId);
+      const input = document.getElementById(inputId);
+
+      slider.addEventListener('input', function () {
+        const value = parseInt(this.value);
+        let displayText = '正常';
+
+        if (value < 0) {
+          displayText = `慢 ${Math.abs(value)}%`;
+        } else if (value > 0) {
+          displayText = `快 ${value}%`;
+        }
+
+        valueDisplay.textContent = displayText;
+
+        // 设置实际的 rate 值，格式为 +X% 或 -X%
+        const prefix = value >= 0 ? '+' : '-';
+        input.value = `${prefix}${Math.abs(value)}%`;
+      });
+    }
+
+    // 初始化文件拖放区域
+    function initFileDrop() {
+      const dropArea = document.getElementById('file-drop-area');
+      const fileInput = document.getElementById('file-input');
+
+      dropArea.addEventListener('click', () => fileInput.click());
+
+      dropArea.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropArea.classList.add('dragover');
+      });
+
+      dropArea.addEventListener('dragleave', () => {
+        dropArea.classList.remove('dragover');
+      });
+
+      dropArea.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropArea.classList.remove('dragover');
+
+        if (e.dataTransfer.files.length) {
+          fileInput.files = e.dataTransfer.files;
+          dropArea.querySelector('p').textContent = `已选择: ${e.dataTransfer.files[0].name}`;
+        }
+      });
+
+      fileInput.addEventListener('change', () => {
+        if (fileInput.files.length) {
+          dropArea.querySelector('p').textContent = `已选择: ${fileInput.files[0].name}`;
+        } else {
+          dropArea.querySelector('p').textContent = '拖放文件到此处 或 点击选择文件';
+        }
+      });
+    }
+
+    // 初始化所有功能
+    document.addEventListener('DOMContentLoaded', function () {
+      // 初始化语速控制
+      initSlider('rate-slider', 'rate-value', 'rate-input');
+      initSlider('rate-slider-file', 'rate-value-file', 'rate-input-file');
+      initSlider('rate-slider-shici', 'rate-value-shici', 'rate-input-shici');
+
+      // 初始化音量控制
+      initSlider('volume-slider', 'volume-value', 'volume-input');
+      initSlider('volume-slider-shici', 'volume-value-shici', 'volume-input-shici');
+
+      // 初始化文件拖放
+      initFileDrop();
+
+      // 文本转语音
+      document.getElementById('convert-btn').addEventListener('click', async function () {
+        const text = document.getElementById('test-text').value;
+        const voice = document.getElementById('voice-select').value;
+        const rate = document.getElementById('rate-input').value;
+        const volume = document.getElementById('volume-input').value;
+        const audioContainer = document.getElementById('audio-test');
+        const spinner = document.getElementById('spinner-test');
+
+        if (!text) {
+          alert('请输入文本');
+          return;
+        }
+
+        audioContainer.innerHTML = '';
+        spinner.style.display = 'block';
+
+        try {
+          const formData = new FormData();
+          formData.append('text', text);
+          formData.append('voice', voice);
+          formData.append('rate', rate);
+          formData.append('volume', volume);
+          formData.append('pitch', '+0Hz');
+
+          const response = await fetch('/convert-text', {
+            method: 'POST',
+            body: formData
+          });
+
+          const data = await response.json();
+
+          const audioEntry = document.createElement('div');
+          audioEntry.className = 'audio-entry';
+
+          const audio = document.createElement('audio');
+          audio.controls = true;
+          audio.src = data.audio_path;
+
+          audioEntry.appendChild(audio);
+          audioContainer.appendChild(audioEntry);
+        } catch (error) {
+          console.error('Error:', error);
+          audioContainer.innerHTML = '<div class="alert alert-danger">转换失败，请重试</div>';
+        } finally {
+          spinner.style.display = 'none';
+        }
+      });
+
+      // 上传文件
+      document.getElementById('upload-btn').addEventListener('click', async function () {
+        const fileInput = document.getElementById('file-input');
+        const voice = document.getElementById('voice-select-file').value;
+        const rate = document.getElementById('rate-input-file').value;
+        const segmentSize = document.getElementById('segment-size').value;
+        const audioContainer = document.getElementById('audio-file');
+        const spinner = document.getElementById('spinner-file');
+
+        if (!fileInput.files[0]) {
+          alert('请选择文件');
+          return;
+        }
+
+        audioContainer.innerHTML = '';
+        spinner.style.display = 'block';
+
+        try {
+          const formData = new FormData();
+          formData.append('file', fileInput.files[0]);
+          formData.append('voice', voice);
+          formData.append('rate', rate);
+          formData.append('volume', '+0%');
+          formData.append('pitch', '+0Hz');
+          formData.append('segment_size', segmentSize);
+
+          const response = await fetch('/convert-file', {
+            method: 'POST',
+            body: formData
+          });
+
+          const data = await response.json();
+
+          data.audio_files.forEach((file, index) => {
+            const audioEntry = document.createElement('div');
+            audioEntry.className = 'audio-entry';
+
+            const label = document.createElement('p');
+            label.textContent = `段落 ${index + 1}`;
+
+            const audio = document.createElement('audio');
+            audio.controls = true;
+            audio.src = file;
+
+            audioEntry.appendChild(label);
+            audioEntry.appendChild(audio);
+            audioContainer.appendChild(audioEntry);
+          });
+        } catch (error) {
+          console.error('Error:', error);
+          audioContainer.innerHTML = '<div class="alert alert-danger">转换失败，请重试</div>';
+        } finally {
+          spinner.style.display = 'none';
+        }
+      });
+
+      // 处理 shici.txt
+      document.getElementById('process-shici-btn').addEventListener('click', async function () {
+        const voice = document.getElementById('voice-select-shici').value;
+        const rate = document.getElementById('rate-input-shici').value;
+        const volume = document.getElementById('volume-input-shici').value;
+        const audioContainer = document.getElementById('audio-shici');
+        const spinner = document.getElementById('spinner-shici');
+
+        audioContainer.innerHTML = '';
+        spinner.style.display = 'block';
+
+        try {
+          const formData = new FormData();
+          formData.append('voice', voice);
+          formData.append('rate', rate);
+          formData.append('volume', volume);
+          formData.append('pitch', '+0Hz');
+
+          const response = await fetch('/process-shici', {
+            method: 'POST',
+            body: formData
+          });
+
+          const data = await response.json();
+
+          if (data.status === 'success') {
+            data.audio_files.forEach(file => {
+              const audioEntry = document.createElement('div');
+              audioEntry.className = 'audio-entry';
+
+              const label = document.createElement('p');
+              label.textContent = `${file.id}. ${file.character} (${file.pinyin})`;
+
+              const audio = document.createElement('audio');
+              audio.controls = true;
+              audio.src = file.path;
+
+              audioEntry.appendChild(label);
+              audioEntry.appendChild(audio);
+              audioContainer.appendChild(audioEntry);
+            });
+          } else {
+            audioContainer.innerHTML = `<div class="alert alert-danger">处理失败: ${data.message}</div>`;
+          }
+        } catch (error) {
+          console.error('Error:', error);
+          audioContainer.innerHTML = '<div class="alert alert-danger">处理失败，请重试</div>';
+        } finally {
+          spinner.style.display = 'none';
+        }
+      });
+    });
+  </script>
+</body>
+
+</html>
