@@ -1,0 +1,4 @@
+[submodule "edge-tts"]
+	path = edge-tts
+	url = https://github.com/rany2/edge-tts.git
+	branch = master 

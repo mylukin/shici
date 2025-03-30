@@ -27,19 +27,25 @@
    cd shici
    ```
 
-2. 创建并激活虚拟环境:
+2. 初始化并更新子模块:
+   ```
+   git submodule init
+   git submodule update
+   ```
+
+3. 创建并激活虚拟环境:
    ```
    python -m venv venv
    source venv/bin/activate  # Linux/Mac
    venv\Scripts\activate     # Windows
    ```
 
-3. 安装依赖:
+4. 安装依赖:
    ```
    pip install -r requirements.txt
    ```
 
-4. 启动应用:
+5. 启动应用:
    ```
    python app.py
    ```
@@ -48,7 +54,7 @@
    uvicorn app:app --host 0.0.0.0 --port 8000 --reload
    ```
 
-5. 打开浏览器访问 `http://localhost:8000`
+6. 打开浏览器访问 `http://localhost:8000`
 
 ## 使用方法
 
@@ -112,6 +118,21 @@ python app.py
 - 文件操作和音频合并过程有详细记录
 - 错误信息会被完整捕获并记录
 
+## Edge TTS 子模块
+
+本项目使用 Edge TTS 作为语音合成引擎，它作为 Git 子模块集成到项目中：
+
+### 关于 Edge TTS
+- Edge TTS 是一个允许使用微软 Edge 浏览器在线文本转语音服务的 Python 模块
+- 提供高质量的多语言语音合成能力，支持中文在内的多种语言
+- 允许调整语速、音量和音调
+- 支持生成音频文件和字幕文件
+
+### 子模块管理
+- 子模块路径：`edge-tts/`
+- 初始化：使用 `git submodule init` 和 `git submodule update` 命令
+- 更新：使用 `git submodule update --remote` 命令获取最新版本
+
 ## 项目结构
 
 ```
@@ -119,6 +140,7 @@ shici/
 ├── app.py            # FastAPI 应用主文件
 ├── utils.py          # 工具函数，包含 TTS 和文件处理逻辑
 ├── requirements.txt  # 项目依赖
+├── edge-tts/         # Edge TTS 子模块
 ├── static/           # 静态文件
 │   └── audio/        # 生成的单句音频文件
 ├── templates/        # HTML 模板
@@ -157,8 +179,29 @@ shici/
 - Edge TTS: 微软 Edge 浏览器的文本转语音引擎
 - Jinja2: HTML 模板引擎
 - WebSockets: 实时通信
-- Pydub: 音频处理
+- Pydub/FFmpeg: 音频处理
+- psutil: 进程管理和监控
 
 ## 许可
 
-MIT 
+MIT License
+
+Copyright (c) 2023-2024 作者名称
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE. 
