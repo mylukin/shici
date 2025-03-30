@@ -23,7 +23,7 @@
 
 1. 克隆此仓库:
    ```
-   git clone https://github.com/yourusername/shici.git
+   git clone https://github.com/mylukin/shici.git
    cd shici
    ```
 
@@ -186,7 +186,7 @@ shici/
 
 MIT License
 
-Copyright (c) 2023-2024 作者名称
+Copyright (c) 2023-2024 Lukin
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
